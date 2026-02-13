@@ -11,12 +11,18 @@ deployments:
     entrypoint: orchestration/prefect_flows.py:development_cycle
     parameters:
       task_id: "task-example"
-      repo_url: "https://github.com/org/repo.git"  # Override at trigger time
-      task_title: "Example Task"
-      task_description: "This is an example task"
-      target_branch: "feature/example"
+      repo_url: "https://github.com/kruczele/claude-cicd.git"
+      task_title: "New Task"
+      task_description: "Add your task instructions here"
+      target_branch: "feature/claude-dev"
       main_branch: "main"
       priority: "medium"
     work_pool:
       name: "Claude CICD"
-    work_queue_name: "claude-skills"
+      work_queue_name: "claude-skills"
+      job_variables:
+        image: claude-skill-runner:latest
+        entrypoint: ""
+        command: null
+        volumes:
+          - /var/run/docker.sock:/var/run/docker.sock
