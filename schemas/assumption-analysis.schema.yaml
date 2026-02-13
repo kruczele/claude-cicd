@@ -1,0 +1,705 @@
+# Assumption analysis from devils-advocate skill
+# Meta-debugging when verification fails repeatedly
+
+version: "1.0"
+schema_type: "assumption-analysis"
+
+# Frontmatter (YAML)
+---
+task_id: string
+analysis_id: string
+iteration: integer
+skill: "devils-advocate"
+
+# Trigger information
+trigger_reason: enum      # "verification_failed_N_times", "circular_fixes", "manual_request"
+failed_attempts: integer
+total_time_spent_seconds: integer
+
+# Analysis results
+root_cause_found: boolean
+confidence: float         # 0.0-1.0, how certain we are
+root_cause_category: enum # "type_mismatch", "timing", "state_management", "environment",
+                         # "assumption_violation", "integration", "config", "unknown"
+
+# Recommendations
+recommended_action: enum  # "auto_fix", "user_decision", "escalate", "restart_approach"
+estimated_fix_effort: enum # "trivial", "small", "medium", "large", "rewrite"
+
+# Markdown body follows
+---
+
+# Markdown content
+
+## Executive Summary
+
+One-paragraph summary of what we found and what to do.
+
+---
+
+## Problem Pattern
+
+What keeps failing and how.
+
+---
+
+## Fixes Attempted
+
+Chronological list of what we tried and why it didn't work.
+
+---
+
+## Assumption Analysis
+
+### Assumptions We Made ✅❌
+
+List all assumptions, mark which were validated and which were wrong.
+
+---
+
+## Root Cause
+
+### The Real Problem
+
+Deep dive into what's actually broken.
+
+### Why Previous Fixes Failed
+
+Explain why each attempt missed the mark.
+
+### Evidence
+
+Concrete proof of the root cause.
+
+---
+
+## Recommended Solution
+
+### Primary Fix
+Detailed explanation of the right fix.
+
+### Alternative Approaches
+Other ways to solve this.
+
+### Validation Plan
+How to verify the fix actually works.
+
+---
+
+## Lessons Learned
+
+Patterns to remember for future.
+
+### Project-Specific Patterns
+Things specific to this codebase.
+
+### General Principles
+Universal lessons applicable elsewhere.
+
+---
+
+## Blast Radius
+
+What else might be affected by this issue or its fix?
+
+---
+
+## Prevention
+
+How to catch this type of issue earlier next time.
+
+---
+# EXAMPLE: Devils-advocate analysis of auth token failure
+
+---
+task_id: "task-001"
+analysis_id: "devils-advocate-001"
+iteration: 4
+skill: "devils-advocate"
+
+trigger_reason: "verification_failed_3_times"
+failed_attempts: 3
+total_time_spent_seconds: 1847
+
+root_cause_found: true
+confidence: 0.95
+root_cause_category: "type_mismatch"
+
+recommended_action: "auto_fix"
+estimated_fix_effort: "trivial"
+---
+
+## Executive Summary
+
+**Root cause identified with 95% confidence:** Type mismatch between JWT token payload (string userId) and database query (integer userId).
+
+Token generation converts user ID to string (`user.id.toString()`), but database lookup doesn't coerce it back to integer. PostgreSQL query `WHERE id = '123'` (string) doesn't match `WHERE id = 123` (integer), returns null, causing 401.
+
+**Recommended fix:** Remove `.toString()` call in `src/auth/jwt.ts:23` - store integer directly in JWT payload. One-line change, low risk.
+
+**Why we missed this:** Unit tests mocked database with string IDs, integration tests failed but logs showed "user not found" without revealing type issue. Only explicit database schema inspection revealed the mismatch.
+
+---
+
+## Problem Pattern
+
+### Symptom
+Token refresh endpoint consistently returns 401 "Invalid token" despite:
+- Token signature being valid
+- Token not expired
+- Token payload structure correct
+- Unit tests passing
+
+### Failure Frequency
+100% failure rate across 3 verification attempts and ~50 test runs.
+
+### What Changed Between Attempts
+- Attempt 1: Added token persistence logic
+- Attempt 2: Modified middleware validation
+- Attempt 3: Changed token signing algorithm
+
+None of these touched the actual bug, so all failed the same way.
+
+---
+
+## Fixes Attempted
+
+### Attempt 1: Token Persistence (Iteration 1)
+**Hypothesis:** Refresh tokens not being saved to database.
+
+**What we did:**
+- Added `refresh_tokens` table
+- Implemented insert logic on token generation
+- Added lookup logic on refresh endpoint
+
+**Why it failed:**
+Token storage was irrelevant - the issue was user lookup failing before we even checked refresh token validity.
+
+**Time spent:** 420 seconds
+
+---
+
+### Attempt 2: Middleware Validation (Iteration 2)
+**Hypothesis:** Middleware token extraction buggy.
+
+**What we did:**
+- Refactored token extraction from Authorization header
+- Added better error handling
+- Improved logging
+
+**Why it failed:**
+Token extraction worked fine - got the token correctly. Issue was downstream in user lookup.
+
+**Time spent:** 538 seconds
+
+---
+
+### Attempt 3: Token Signing (Iteration 3)
+**Hypothesis:** Signature algorithm mismatch.
+
+**What we did:**
+- Changed from HS256 to RS256
+- Updated verification logic
+- Regenerated test tokens
+
+**Why it failed:**
+Signature validation already worked - debug logs showed "signature valid: true". Changed something that wasn't broken.
+
+**Time spent:** 889 seconds
+
+---
+
+## Assumption Analysis
+
+### ✅ Assumptions That Were Correct
+
+1. **JWT library works correctly**
+   - Verified: Tokens sign and verify properly
+   - Evidence: Unit tests pass, debug logs show valid signatures
+
+2. **Middleware execution order correct**
+   - Verified: Middleware runs before route handlers
+   - Evidence: Can confirm 401 returns before handler code
+
+3. **Token structure is correct**
+   - Verified: Contains required fields (userId, type, exp)
+   - Evidence: Payload inspection in logs
+
+4. **Database connection works**
+   - Verified: Can query database successfully
+   - Evidence: Registration and login endpoints work
+
+5. **Token not expired**
+   - Verified: Fresh tokens generated in tests
+   - Evidence: exp timestamp in future
+
+---
+
+### ❌ Assumptions That Were WRONG
+
+1. **"User lookup should work if token is valid"**
+   - **Wrong:** Token validity doesn't guarantee database query success
+   - **Why it mattered:** Led us to debug token validation instead of database query
+
+2. **"Types will coerce automatically"**
+   - **Wrong:** PostgreSQL doesn't auto-coerce string to int in WHERE clause
+   - **Why it mattered:** The actual root cause
+   - **Evidence:**
+     ```sql
+     -- This returns 0 rows:
+     SELECT * FROM users WHERE id = '123';
+
+     -- This returns the user:
+     SELECT * FROM users WHERE id = 123;
+     ```
+
+3. **"If unit tests pass, integration should pass"**
+   - **Wrong:** Unit tests used mocked database with string IDs
+   - **Why it mattered:** False confidence that code was correct
+   - **Evidence:** Mock in `tests/auth/jwt.test.ts:12` used `{ id: '123', ... }`
+
+4. **"Debug logs tell the full story"**
+   - **Wrong:** Logs showed "user not found" but not WHY
+   - **Why it mattered:** Looked like user wasn't in DB, not a type issue
+   - **Fix needed:** Log the actual query parameters and types
+
+---
+
+## Root Cause
+
+### The Real Problem
+
+**File:** `src/auth/jwt.ts:23`
+
+```typescript
+// BROKEN CODE
+export function generateToken(user: User): string {
+  const payload = {
+    userId: user.id.toString(),  // ❌ Converting to string
+    email: user.email,
+    type: 'access'
+  };
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
+}
+```
+
+**File:** `src/middleware/auth.ts:34`
+
+```typescript
+// User lookup
+const result = await db.query(
+  'SELECT * FROM users WHERE id = $1',  // Expects integer
+  [userId]  // But userId is "123" (string) from token
+);
+```
+
+**Database schema:** `users.id` is `INTEGER` type (confirmed via `\d users` in psql).
+
+**The mismatch:**
+- Token payload: `{ userId: "123" }` (string)
+- Database column: `INTEGER`
+- PostgreSQL doesn't implicitly cast in WHERE clauses
+- Query returns 0 rows
+- Code interprets as "user doesn't exist"
+- Returns 401
+
+---
+
+### Why Previous Fixes Failed
+
+1. **Attempt 1 (Persistence):**
+   - We added refresh token storage, but the user lookup happens BEFORE we check refresh tokens
+   - Even if refresh token was valid, the 401 came from failed user lookup
+   - Fixing the wrong part of the flow
+
+2. **Attempt 2 (Middleware):**
+   - Token extraction worked fine - we got the token
+   - Changed the plumbing but not the broken valve
+   - Like fixing the pipe when the problem is the water is toxic
+
+3. **Attempt 3 (Signing):**
+   - Signature validation succeeded in all attempts
+   - Changed the lock when the problem is the wrong key
+   - Actually made things worse by adding complexity
+
+**Pattern:** All fixes addressed symptoms (401 error) rather than root cause (type mismatch). We kept looking at the token itself when the problem was in the database integration.
+
+---
+
+### Evidence
+
+#### 1. Database Schema Inspection
+```sql
+\d users
+
+Column |  Type   | Nullable | Default
+-------+---------+----------+---------
+id     | integer | not null | nextval('users_id_seq')
+email  | varchar | not null |
+...
+```
+
+#### 2. Token Payload Dump
+```javascript
+// Decoded from actual token in test
+{
+  "userId": "123",      // <-- STRING
+  "email": "test@example.com",
+  "type": "access",
+  "iat": 1739448732,
+  "exp": 1739449632
+}
+```
+
+#### 3. Query Behavior Test
+```sql
+-- Test with string (what we were doing)
+SELECT * FROM users WHERE id = '123';
+ id | email | ...
+----+-------+-----
+(0 rows)
+
+-- Test with integer (what we should do)
+SELECT * FROM users WHERE id = 123;
+ id  |          email          | ...
+-----+-------------------------+-----
+ 123 | test-user-1@example.com | ...
+```
+
+#### 4. Debug Log Evidence
+```
+[DEBUG] Token payload: { userId: "123", type: "refresh", ... }
+[DEBUG] Querying: SELECT * FROM users WHERE id = $1
+[DEBUG] Query params: ["123"]  // <-- String parameter
+[DEBUG] Query result rows: 0   // <-- Nothing found
+```
+
+---
+
+## Recommended Solution
+
+### Primary Fix (RECOMMENDED)
+
+**Option A: Store integer in token (preferred)**
+
+**File:** `src/auth/jwt.ts:23`
+
+```typescript
+// FIXED CODE
+export function generateToken(user: User): string {
+  const payload = {
+    userId: user.id,  // ✅ Store as-is (integer)
+    email: user.email,
+    type: 'access'
+  };
+  return jwt.sign(payload, JWT_SECRET, { expiresIn: '15m' });
+}
+```
+
+**Pros:**
+- Simplest fix (remove code)
+- Types match database naturally
+- No coercion overhead
+- One location to change
+
+**Cons:**
+- Invalidates all existing tokens (minor - short TTL anyway)
+
+**Risk:** Low - JWT libraries handle integer payloads fine.
+
+---
+
+### Alternative Approaches
+
+**Option B: Coerce in database query**
+
+**File:** `src/middleware/auth.ts:34`
+
+```typescript
+const userId = parseInt(token.userId, 10);  // Cast to int
+const result = await db.query(
+  'SELECT * FROM users WHERE id = $1',
+  [userId]
+);
+```
+
+**Pros:**
+- Doesn't invalidate existing tokens
+- Defensive programming
+
+**Cons:**
+- Adds conversion logic in multiple places
+- Easy to forget in new code
+- Type system now lies (says string, uses int)
+
+**Risk:** Medium - need to remember coercion everywhere userId is used.
+
+---
+
+**Option C: Change database column to text**
+
+**File:** `migrations/XXX_change_user_id_to_text.sql`
+
+```sql
+ALTER TABLE users ALTER COLUMN id TYPE VARCHAR;
+```
+
+**Pros:**
+- Makes types actually match
+
+**Cons:**
+- Major schema change
+- Affects indexes, foreign keys
+- String IDs are slower and larger
+- Breaks other parts of app
+- Completely wrong direction
+
+**Risk:** High - don't do this.
+
+---
+
+### Recommended Choice
+
+**Option A** - Remove the `.toString()` call.
+
+**Rationale:**
+1. Simplest fix (delete 11 characters)
+2. Aligns types naturally (int → int)
+3. Low risk (tested pattern)
+4. No ongoing maintenance burden
+5. Token TTL is short (15min) so invalidation is fine
+
+---
+
+### Validation Plan
+
+After applying fix:
+
+1. **Unit tests should still pass** (currently passing)
+
+2. **Integration test must pass:**
+   ```bash
+   npm test tests/integration/auth.test.ts -- --grep "Token refresh"
+   ```
+   Expected: 200 response with new access token
+
+3. **Manual verification:**
+   ```bash
+   # Register user
+   curl -X POST http://localhost:3000/api/auth/register \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"Test123!"}'
+
+   # Login (get token)
+   curl -X POST http://localhost:3000/api/auth/login \
+     -H "Content-Type: application/json" \
+     -d '{"email":"test@example.com","password":"Test123!"}'
+
+   # Refresh token
+   curl -X POST http://localhost:3000/api/auth/refresh \
+     -H "Authorization: Bearer <refresh_token>"
+
+   # Should return 200 with new token
+   ```
+
+4. **Database inspection:**
+   ```sql
+   -- Check user lookup works with integer from token
+   SELECT * FROM users WHERE id = 123;  -- Should return user
+   ```
+
+5. **Load test:**
+   - Run concurrent token refresh test
+   - Verify race condition doesn't resurface
+
+---
+
+## Lessons Learned
+
+### Project-Specific Patterns
+
+1. **Database is PostgreSQL, not MySQL**
+   - PostgreSQL is strict about types
+   - MySQL would have auto-coerced string to int
+   - Remember: check DB flavor when debugging
+
+2. **User IDs are integers in this codebase**
+   - Verified in schema: `id INTEGER PRIMARY KEY`
+   - Pattern used consistently in existing code
+   - New code should match this convention
+
+3. **Mocks in tests use string IDs**
+   - Tests at `tests/auth/*.test.ts` have mocks with `{ id: '123' }`
+   - **ACTION ITEM:** Update mocks to use integers
+   - Prevents false confidence from passing unit tests
+
+4. **Existing auth code in `/legacy-auth` uses integer IDs**
+   - Could have checked this as reference implementation
+   - Lesson: Look at existing patterns before inventing new ones
+
+---
+
+### General Principles
+
+1. **Type boundaries are failure points**
+   - Where types change (string ↔ int, JSON ↔ DB), bugs hide
+   - Always verify actual types, not assumed types
+   - Use TypeScript strictly (`strict: true` in tsconfig)
+
+2. **Integration tests reveal truth**
+   - Unit tests passed because mocks matched our wrong assumption
+   - Integration tests caught real DB behavior
+   - Prefer integration tests for critical paths
+
+3. **Log the types, not just values**
+   - Instead of: `console.log('userId:', userId)`
+   - Use: `console.log('userId:', userId, typeof userId)`
+   - Or: `console.log('Query params:', params.map(p => [p, typeof p]))`
+
+4. **When stuck, check assumptions about data contracts**
+   - Don't just debug the code in front of you
+   - Verify the contract between components (types, schemas, formats)
+   - In this case: token payload type vs database column type
+
+5. **Repeated failures = wrong mental model**
+   - If 3 fixes fail, you're solving the wrong problem
+   - Step back, question foundational assumptions
+   - Exactly what devils-advocate is for!
+
+6. **Evidence beats intuition**
+   - Don't assume PostgreSQL coerces types (it doesn't)
+   - Don't assume unit tests catch everything (they don't)
+   - Test actual behavior, not expected behavior
+
+---
+
+## Blast Radius
+
+### What Else Might Be Affected?
+
+#### 1. Password Reset Tokens (if implemented)
+**Risk:** Same pattern might exist there
+**Check:** `src/auth/password-reset.ts` - does it also `.toString()` user ID?
+**Action:** Audit when implemented
+
+#### 2. Other Token Types
+**Risk:** Refresh tokens, email verification tokens, etc.
+**Check:** Grep for `.toString()` in `src/auth/`
+**Action:** Fix all instances
+
+#### 3. API Endpoints Using User ID from Tokens
+**Risk:** Any endpoint extracting `userId` from JWT might have type issues
+**Check:** Grep for `token.userId` or `req.user.id`
+**Action:** Verify all queries handle integer IDs
+
+#### 4. Existing Tokens in Production (if deployed)
+**Risk:** All current tokens have string userId
+**Action:**
+- If in production: Deploy fix + force re-login (short-lived tokens expire anyway)
+- If not deployed: No impact
+
+#### 5. Frontend/API Contract
+**Risk:** If frontend expects string userId in responses
+**Check:** API documentation, frontend code
+**Action:** Unlikely since ID comes from DB (already integer), but verify
+
+---
+
+## Prevention
+
+### How to Catch This Earlier Next Time
+
+#### 1. Stricter TypeScript
+```typescript
+// In tsconfig.json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictPropertyInitialization": true
+  }
+}
+```
+
+#### 2. Better Test Mocks
+```typescript
+// tests/auth/jwt.test.ts
+const mockUser: User = {
+  id: 123,  // ✅ Use actual type
+  email: 'test@example.com'
+};
+```
+
+**ACTION ITEM:** Create `tests/fixtures/user.ts` with typed fixtures.
+
+#### 3. Database Schema Validation Tests
+```typescript
+// tests/schema.test.ts
+test('User ID is integer type', async () => {
+  const result = await db.query(`
+    SELECT data_type FROM information_schema.columns
+    WHERE table_name = 'users' AND column_name = 'id'
+  `);
+  expect(result.rows[0].data_type).toBe('integer');
+});
+```
+
+#### 4. Integration Tests Earlier
+- Run integration tests in pre-verify stage
+- Don't rely solely on unit tests for critical paths
+- Fail fast with real database
+
+#### 5. Type Logging in Debug Mode
+```typescript
+if (process.env.DEBUG) {
+  console.log('Token userId:', token.userId, typeof token.userId);
+  console.log('Query param:', userId, typeof userId);
+}
+```
+
+#### 6. Code Review Checklist
+- [ ] Types match between components?
+- [ ] Database column types verified?
+- [ ] Test mocks use real types?
+- [ ] Integration tests cover critical paths?
+
+#### 7. Pre-verify Strategy Enhancement
+Add explicit assumption checking:
+```markdown
+## Type Consistency Checks
+- [ ] Token payload types match database column types
+- [ ] No implicit .toString() or parseInt() needed
+- [ ] TypeScript types reflect runtime types
+```
+
+---
+
+## Immediate Next Steps
+
+1. **Apply fix** (1 min):
+   ```bash
+   # Remove .toString() from jwt.ts:23
+   sed -i 's/userId: user\.id\.toString()/userId: user.id/' src/auth/jwt.ts
+   ```
+
+2. **Fix other instances** (2 min):
+   ```bash
+   # Find any other .toString() on user IDs
+   grep -r "\.id\.toString()" src/auth/
+   ```
+
+3. **Update test mocks** (5 min):
+   - Change `id: '123'` to `id: 123` in all test files
+
+4. **Re-run verification** (5 min):
+   ```bash
+   npm test
+   ```
+
+5. **If verification passes**: Create PR, mark task complete
+
+6. **If verification still fails**: Manual escalation to user (but 95% confident this fixes it)
+
+**Total estimated time:** 15 minutes
+**Confidence:** 95%

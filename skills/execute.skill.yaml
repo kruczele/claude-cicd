@@ -1,0 +1,218 @@
+# SKILL: Execute
+# Performs the actual implementation work
+
+name: "execute"
+version: "1.0"
+description: |
+  Implements the task by writing, editing, and testing code.
+  Follows the execution plan from triage.
+  Produces working code and comprehensive state documentation.
+
+inputs:
+  - task-input.yaml          # Task definition
+  - triage-plan.yaml         # Execution strategy (if from triage)
+  - state.md                 # Previous state (if resuming)
+  - user-responses.md        # Answers to questions (if applicable)
+
+outputs:
+  - state.md                 # Current state and progress
+  - feedback.md              # Questions/blockers (if any)
+  - git commits              # Code changes on target branch
+
+responsibilities:
+  - Implement features according to requirements
+  - Write clean, maintainable code
+  - Follow existing code patterns and conventions
+  - Write tests for new code
+  - Document decisions and trade-offs
+  - Identify blockers and ask questions
+  - Track progress and state
+
+principles:
+  - "Read before writing - understand existing code first"
+  - "Follow existing patterns - consistency over cleverness"
+  - "Test as you go - don't defer testing"
+  - "Document decisions - explain why, not just what"
+  - "Ask early - don't guess requirements"
+  - "Commit often - logical, atomic commits"
+  - "Security first - no vulnerabilities"
+
+workflow:
+  1_understand:
+    - Read task requirements and context
+    - Review previous state (if resuming)
+    - Read user responses to questions (if any)
+    - Understand existing codebase patterns
+
+  2_plan_iteration:
+    - Decide what to implement this iteration
+    - Identify files to modify
+    - Consider edge cases
+    - Plan validation approach
+
+  3_implement:
+    - Write/edit code
+    - Follow existing conventions
+    - Keep changes focused and minimal
+    - Add necessary tests
+
+  4_validate_locally:
+    - Run tests
+    - Check linting
+    - Verify types
+    - Manual smoke test if needed
+
+  5_commit:
+    - Create atomic, logical commits
+    - Write clear commit messages
+    - Push to target branch
+
+  6_document:
+    - Update state.md with progress
+    - Document decisions made
+    - Note what's next
+    - Create feedback.md if blocked
+
+  7_determine_next:
+    - Is task complete? → Mark done, prepare for verification
+    - Need user input? → Create feedback.md, pause
+    - More work needed? → Document state, prepare for next iteration
+
+code_quality:
+  security:
+    - No hardcoded secrets
+    - Input validation on all external data
+    - SQL parameterization (no string concatenation)
+    - XSS prevention
+    - CSRF protection where applicable
+    - No eval() or dangerous functions
+
+  maintainability:
+    - Follow project naming conventions
+    - Keep functions small and focused
+    - Avoid premature optimization
+    - Write self-documenting code
+    - Add comments only for complex logic
+
+  testing:
+    - Unit tests for business logic
+    - Integration tests for critical paths
+    - Edge cases covered
+    - Happy path and error cases
+    - Maintain coverage thresholds
+
+  git:
+    - Atomic commits (one logical change per commit)
+    - Clear commit messages (what and why)
+    - No commented-out code
+    - No debug statements
+    - No merge commits (rebase if needed)
+
+prompts:
+  system: |
+    You are an expert software engineer implementing a task.
+
+    Your goals:
+    1. Deliver working, tested code
+    2. Follow existing patterns
+    3. Document your work clearly
+    4. Ask questions when blocked
+    5. Be transparent about trade-offs
+
+    You have access to all necessary tools:
+    - Read/Edit/Write for code changes
+    - Grep/Glob for code exploration
+    - Bash for git operations and testing
+    - Task tool for spawning specialized work
+
+    Remember: Quality > Speed. It's better to ask than to guess.
+
+  task: |
+    Implement this task:
+
+    Task: {task.title}
+    Description: {task.description}
+    Target branch: {git.target_branch}
+    Working directory: {context.working_directory}
+
+    {if context.previous_state_path}
+    Previous state: {read context.previous_state_path}
+    {endif}
+
+    {if context.user_responses_path}
+    User responses: {read context.user_responses_path}
+    {endif}
+
+    Follow the workflow:
+    1. Understand the task and codebase
+    2. Plan your approach
+    3. Implement changes
+    4. Test locally
+    5. Commit your work
+    6. Document state
+
+    Output state.md when done or blocked.
+
+examples:
+  - scenario: "Implementing new feature"
+    actions:
+      - "Read existing code to understand patterns"
+      - "Identify files to modify"
+      - "Implement feature incrementally"
+      - "Write tests alongside code"
+      - "Commit each logical chunk"
+      - "Document state with decisions made"
+
+  - scenario: "Blocked on user decision"
+    actions:
+      - "Implement what's unambiguous"
+      - "Document the blocking question"
+      - "Create feedback.md with options"
+      - "Update state.md with current progress"
+      - "Push work done so far"
+
+  - scenario: "Resuming from previous iteration"
+    actions:
+      - "Read state.md to understand context"
+      - "Read user-responses.md for decisions"
+      - "Continue from where left off"
+      - "Update state.md with new progress"
+
+iteration_control:
+  max_time: 1800  # 30 minutes per iteration
+
+  completion_criteria:
+    - Code implements requirements
+    - Tests pass locally
+    - Changes committed and pushed
+    - State documented
+
+  pause_criteria:
+    - Blocking question arises
+    - Time limit approaching
+    - Unexpected complexity discovered
+    - External dependency missing
+
+container:
+  image: "claude-skill-execute:latest"
+  timeout: 1800  # 30 minutes
+  resources:
+    memory: "2Gi"
+    cpu: "2"
+
+  volumes:
+    - name: "workspace"
+      path: "/workspace"
+    - name: "ssh-keys"
+      path: "/root/.ssh"
+      secret: true
+
+tools_available:
+  - Read
+  - Edit
+  - Write
+  - Glob
+  - Grep
+  - Bash
+  - Task (for spawning sub-agents)
+  - AskUserQuestion (for clarifications)

@@ -1,0 +1,80 @@
+# Input manifest provided to every skill execution
+# This is the contract for starting any Claude worker iteration
+
+version: "1.0"
+schema_type: "task-input"
+
+# Task identification and tracking
+task_id: string           # Unique identifier (e.g., "task-001")
+iteration: integer        # Iteration number for this task (starts at 1)
+parent_task_id: string?   # If this is a subtask, reference to parent
+skill: string            # Which skill to execute: "triage", "execute", "pre-verify", "verify", "devils-advocate"
+
+# Git context
+git:
+  target_branch: string   # Branch where changes should be committed
+  main_branch: string     # Base branch (usually "main" or "master")
+  pr_number: integer?     # If resuming work on existing PR
+
+# Task definition
+task:
+  title: string           # Brief task description
+  description: string     # Detailed requirements
+  priority: string        # "low", "medium", "high", "critical"
+  labels: array<string>?  # Optional tags: ["auth", "security", "api"]
+  estimated_complexity: string?  # "trivial", "simple", "medium", "complex", "unknown"
+
+# Context and state
+context:
+  previous_state_path: string?      # Path to state.md from prior iteration
+  user_responses_path: string?      # Path to user's answers to feedback.md
+  validation_strategy_path: string? # For verify skill
+  verification_history_path: string? # For devils-advocate skill
+  working_directory: string         # Absolute path to code repository
+
+# Metadata
+metadata:
+  created_at: timestamp
+  triggered_by: string    # "user", "prefect", "retry"
+  timeout_seconds: integer # Max execution time
+
+# Available resources
+resources:
+  skills_available: array<string>  # Which sub-skills can be invoked
+  max_iterations: integer          # Circuit breaker
+
+# Example values shown below
+---
+# EXAMPLE: Triage skill input
+task_id: "task-001"
+iteration: 1
+parent_task_id: null
+skill: "triage"
+
+git:
+  target_branch: "feature/user-auth"
+  main_branch: "main"
+
+task:
+  title: "Implement user authentication"
+  description: |
+    Add JWT-based authentication to the API. Users should be able to:
+    - Register with email/password
+    - Login and receive access token
+    - Access protected endpoints with token
+    - Refresh expired tokens
+  priority: "high"
+  labels: ["auth", "security", "backend"]
+  estimated_complexity: "unknown"
+
+context:
+  working_directory: "/workspace"
+
+metadata:
+  created_at: "2026-02-13T10:30:00Z"
+  triggered_by: "user"
+  timeout_seconds: 1800
+
+resources:
+  skills_available: ["code_analysis", "testing", "git_operations"]
+  max_iterations: 10

@@ -1,0 +1,178 @@
+# SKILL: Pre-Verify
+# Creates comprehensive validation strategy
+
+name: "pre-verify"
+version: "1.0"
+description: |
+  Analyzes code changes and creates a detailed validation strategy.
+  Defines what needs to be tested and how to verify success.
+  Documents assumptions that need validation.
+
+inputs:
+  - task-input.yaml      # Original task
+  - state.md             # Execution state with changes
+  - git commits          # List of commits to verify
+
+outputs:
+  - validation-strategy.md  # Comprehensive test plan
+
+responsibilities:
+  - Analyze scope of changes
+  - Identify all affected components
+  - Design validation approach
+  - Define success criteria
+  - List assumptions to validate
+  - Plan edge case testing
+  - Estimate validation effort
+  - Consider regression risks
+
+validation_types:
+  unit_tests:
+    - Test individual functions/methods
+    - Mock external dependencies
+    - Cover happy path and error cases
+    - Verify edge cases
+
+  integration_tests:
+    - Test component interactions
+    - Use real dependencies (DB, APIs)
+    - Verify end-to-end flows
+    - Check data contracts
+
+  manual_checks:
+    - Code quality (lint, types)
+    - Security review
+    - Documentation completeness
+    - Convention compliance
+
+  ci_checks:
+    - Build success
+    - Test suite passes
+    - Coverage thresholds
+    - Security scans
+
+  regression_checks:
+    - Existing functionality intact
+    - Performance maintained
+    - No new warnings/errors
+
+prompts:
+  system: |
+    You are a QA engineer designing a validation strategy.
+
+    Your goal: Create a comprehensive test plan that verifies the changes
+    meet requirements and don't break anything.
+
+    Consider:
+    1. What was changed?
+    2. What could break?
+    3. What assumptions were made?
+    4. What edge cases exist?
+    5. What's the blast radius?
+
+    Be thorough but pragmatic. Focus on critical paths and realistic risks.
+
+  task: |
+    Create a validation strategy for these changes:
+
+    Task: {task.title}
+    Description: {task.description}
+
+    Changes made: {read state.md}
+
+    Files modified: {git diff --name-only}
+
+    Analyze the changes and create validation-strategy.md that includes:
+
+    1. **Success Criteria**
+       - What does "done" look like?
+       - Measurable, verifiable criteria
+
+    2. **Unit Tests**
+       - Which test files to run?
+       - What coverage is needed?
+       - Any new tests required?
+
+    3. **Integration Tests**
+       - End-to-end scenarios to verify
+       - Test data requirements
+
+    4. **Manual Checks**
+       - Code quality validations
+       - Security checks
+       - Documentation review
+
+    5. **CI/CD Requirements**
+       - Pipeline stages that must pass
+       - PR requirements
+
+    6. **Assumptions Being Validated**
+       - CRITICAL: List all assumptions made during implementation
+       - How each will be tested
+       - What could go wrong if assumption is false
+
+    7. **Edge Cases**
+       - Boundary conditions
+       - Error scenarios
+       - Concurrent access patterns
+
+    8. **Regression Checks**
+       - Existing functionality to verify
+       - Performance baselines
+
+    The assumptions section is KEY - it enables devils-advocate to help
+    if validation fails repeatedly.
+
+examples:
+  - changes: "Added JWT authentication middleware"
+    strategy:
+      scope: "full"
+      critical_checks:
+        - "Token signature validation"
+        - "Expired token rejection"
+        - "Invalid token handling"
+        - "User lookup from token"
+      assumptions:
+        - "JWT library signs/verifies correctly"
+        - "Middleware runs before route handlers"
+        - "User ID in token matches DB ID type"
+        - "Token expiry timing is synchronized"
+      edge_cases:
+        - "Malformed tokens"
+        - "Tokens signed with wrong secret"
+        - "Concurrent requests same token"
+        - "Missing Authorization header"
+
+complexity_assessment:
+  trivial:
+    scope: "smoke"
+    checks: ["lint", "types", "affected tests"]
+    duration: "< 60s"
+
+  simple:
+    scope: "targeted"
+    checks: ["unit tests", "affected integration tests", "basic manual"]
+    duration: "< 5min"
+
+  medium:
+    scope: "full"
+    checks: ["full test suite", "coverage", "CI pipeline", "manual review"]
+    duration: "< 10min"
+
+  complex:
+    scope: "comprehensive"
+    checks: ["full suite", "coverage", "CI", "manual", "performance", "security scan"]
+    duration: "< 30min"
+
+container:
+  image: "claude-skill-pre-verify:latest"
+  timeout: 300  # 5 minutes
+  resources:
+    memory: "512Mi"
+    cpu: "0.5"
+
+tools_available:
+  - Read
+  - Glob
+  - Grep
+  - Bash (readonly)

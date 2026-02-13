@@ -1,0 +1,48 @@
+# Example task input for testing the skill runner
+
+task_id: "task-example-001"
+iteration: 1
+parent_task_id: null
+skill: "triage"  # Can be: triage, execute, pre-verify, verify, devils-advocate
+
+git:
+  target_branch: "feature/example"
+  main_branch: "main"
+  pr_number: null
+
+task:
+  title: "Add health check endpoint"
+  description: |
+    Add a simple /health endpoint to the API that returns:
+    - Status: "ok"
+    - Timestamp: current UTC time
+    - Version: from package.json
+
+    The endpoint should:
+    - Return 200 OK
+    - Be accessible without authentication
+    - Include basic system metrics
+  priority: "medium"
+  labels:
+    - "api"
+    - "monitoring"
+  estimated_complexity: "simple"
+
+context:
+  previous_state_path: null
+  user_responses_path: null
+  validation_strategy_path: null
+  verification_history_path: null
+  working_directory: "/workspace"
+
+metadata:
+  created_at: "2026-02-13T10:00:00Z"
+  triggered_by: "manual"
+  timeout_seconds: 1800
+
+resources:
+  skills_available:
+    - "code_analysis"
+    - "testing"
+    - "git_operations"
+  max_iterations: 10

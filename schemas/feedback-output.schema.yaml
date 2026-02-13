@@ -1,0 +1,193 @@
+# Feedback document for user communication
+# Questions, blockers, observations from any skill
+
+version: "1.0"
+schema_type: "feedback-output"
+
+# Frontmatter (YAML)
+---
+task_id: string
+iteration: integer
+skill: string
+
+# Feedback metadata
+has_blocking_questions: boolean
+can_proceed_without_answers: boolean
+questions_count: integer
+blockers_count: integer
+severity: enum  # "info", "question", "blocker", "critical"
+
+# Markdown body follows
+---
+
+# Markdown content (structured sections)
+
+## Questions for User
+
+Each question should follow this template:
+
+### Q{N}: {Brief Question Title} ({PRIORITY})
+**Priority:** BLOCKING | IMPORTANT | OPTIONAL
+
+**Context:**
+Why this question matters, what decision point we've reached.
+
+**Options:**
+1. **Option Name** - Description, pros/cons
+2. **Option Name** - Description, pros/cons
+3. **Option Name** - Description, pros/cons
+
+**My recommendation:** {Option number} - {rationale}
+
+**Impact if not answered:**
+What happens if we skip this decision.
+
+---
+
+## Observations
+
+Non-blocking things noticed during work:
+- Potential improvements
+- Code smells
+- Architecture notes
+- Security concerns
+
+---
+
+## Blockers
+
+Issues preventing forward progress:
+- Missing dependencies
+- Environment issues
+- Access/permission problems
+
+---
+
+## Suggestions
+
+Proactive ideas for future consideration:
+- Refactoring opportunities
+- Testing improvements
+- Documentation needs
+
+---
+# EXAMPLE: Feedback from execute skill
+
+---
+task_id: "task-001"
+iteration: 2
+skill: "execute"
+
+has_blocking_questions: true
+can_proceed_without_answers: false
+questions_count: 2
+blockers_count: 0
+severity: "blocker"
+---
+
+## Questions for User
+
+### Q1: Token Refresh Storage Strategy (BLOCKING)
+**Priority:** BLOCKING
+
+**Context:**
+Need to persist refresh tokens for the token refresh endpoint. Access tokens are stateless (JWT), but refresh tokens need server-side validation and revocation capability.
+
+**Options:**
+1. **PostgreSQL Database**
+   - Store in new `refresh_tokens` table
+   - Pros: Already in stack, transactional, no new infrastructure
+   - Cons: Slower than cache, adds DB load
+   - Schema: `id, user_id, token_hash, expires_at, created_at`
+
+2. **Redis Cache**
+   - Store with TTL expiry
+   - Pros: Very fast, automatic expiry, designed for this
+   - Cons: Requires Redis setup, another service to manage
+   - Already have Redis? Unknown
+
+3. **Stateless (No Refresh Tokens)**
+   - Issue longer-lived access tokens (e.g., 7 days)
+   - Pros: Simpler, no storage needed
+   - Cons: Can't revoke tokens, less secure, worse UX if stolen
+
+**My recommendation:** Option 1 (PostgreSQL) - balances security, simplicity, and leverages existing infrastructure. Can optimize later with Redis if needed.
+
+**Impact if not answered:**
+Cannot complete token refresh implementation. Could stub it out and move forward with other tasks, but auth flow will be incomplete.
+
+---
+
+### Q2: Password Reset Flow Scope (IMPORTANT)
+**Priority:** IMPORTANT
+
+**Context:**
+User registration and login are implemented. Password reset is typically part of auth, but not explicitly mentioned in requirements.
+
+**Options:**
+1. **Include in current task** - Add forgot password / reset endpoints
+2. **Defer to separate task** - Focus on core auth first
+3. **Skip entirely** - Not needed for MVP
+
+**My recommendation:** Option 2 - Defer to separate task. Current task is already substantial, and password reset has its own complexity (email sending, token generation, rate limiting).
+
+**Impact if not answered:**
+No impact on current work. Can proceed with assumption we're deferring.
+
+---
+
+## Observations
+
+### Legacy Auth Code
+Found existing auth logic in `/src/legacy-auth/` directory:
+- `legacy-auth/simple-auth.ts` - Basic username/password
+- Used by 2 endpoints: `/api/admin/login`, `/api/internal/health`
+
+**Question:** Should we:
+- Migrate these to new auth system?
+- Leave them as-is (different auth domain)?
+- Deprecate and remove?
+
+Not blocking, but creates auth inconsistency if left alone.
+
+### No Rate Limiting
+Current auth endpoints have no rate limiting. This allows brute force attacks on login.
+
+**Suggestion:** Add rate limiting middleware (e.g., `express-rate-limit`) to:
+- `/api/auth/login` - 5 attempts per 15min per IP
+- `/api/auth/register` - 3 attempts per hour per IP
+
+Can be separate task if preferred.
+
+### Missing Environment Variables Documentation
+Added new env vars (`JWT_SECRET`, `JWT_EXPIRES_IN`) but no `.env.example` file exists.
+
+**Suggestion:** Create `.env.example` template for developers.
+
+---
+
+## Blockers
+
+None currently. Work can proceed once Q1 is answered.
+
+---
+
+## Suggestions
+
+### Testing Strategy
+Written unit tests, but consider adding:
+- Integration tests for full registration → login → protected route flow
+- Load tests for token validation (could be bottleneck)
+
+### Documentation
+Once auth is complete, should we:
+- Update API documentation (Swagger/OpenAPI)?
+- Write developer guide for using auth in new endpoints?
+- Add deployment notes for JWT_SECRET generation?
+
+### Security Audit
+After implementation, recommend security review:
+- Token expiry handling
+- Password requirements enforcement
+- SQL injection prevention in user queries
+- XSS prevention in error messages

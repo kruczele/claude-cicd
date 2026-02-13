@@ -1,0 +1,165 @@
+# SKILL: Triage
+# Analyzes incoming task and determines optimal execution strategy
+
+name: "triage"
+version: "1.0"
+description: |
+  Analyzes a user request and determines the optimal granularity and approach.
+  Decides whether task should be:
+  - Executed immediately (trivial tasks)
+  - Broken into subtasks (complex work)
+  - Researched first (unclear requirements)
+  - Escalated for clarification (ambiguous)
+
+inputs:
+  - task-input.yaml  # Task description from user
+
+outputs:
+  - triage-plan.yaml # Execution strategy
+  - feedback.md      # Questions if needed (optional)
+
+responsibilities:
+  - Analyze task complexity and scope
+  - Identify ambiguities or missing requirements
+  - Determine if task needs decomposition
+  - Create subtask breakdown if needed
+  - Estimate effort and risk
+  - Define success criteria
+  - Propose validation approach
+
+decision_matrix:
+  trivial:
+    criteria:
+      - Single file change
+      - < 20 lines of code
+      - No new dependencies
+      - Clear requirements
+      - No integration needed
+    action: "Execute immediately (single iteration)"
+    example: "Fix typo in README"
+
+  simple:
+    criteria:
+      - 1-3 files affected
+      - Clear requirements
+      - Standard patterns apply
+      - Low risk
+    action: "Execute in single task"
+    example: "Add logging to function"
+
+  medium:
+    criteria:
+      - Multiple files affected
+      - Some complexity
+      - May need research
+      - 1-2 hours work
+    action: "Execute with verification loop"
+    example: "Implement auth middleware"
+
+  complex:
+    criteria:
+      - Many files affected
+      - Architecture decisions needed
+      - Multiple approaches possible
+      - > 2 hours work
+    action: "Break into subtasks"
+    example: "Implement complete auth system"
+
+  research_needed:
+    criteria:
+      - Requirements unclear
+      - Technical approach unknown
+      - Need to explore codebase
+      - Need to evaluate options
+    action: "Research first, then re-triage"
+    example: "Improve performance (where? how?)"
+
+  clarification_needed:
+    criteria:
+      - Ambiguous requirements
+      - Multiple valid interpretations
+      - User preference matters
+      - Missing critical information
+    action: "Generate feedback.md with questions"
+    example: "Add caching (what? where? how long?)"
+
+prompts:
+  system: |
+    You are a senior software architect performing task triage.
+    Your goal is to analyze the task and create an optimal execution plan.
+
+    Principles:
+    1. Prefer simplicity - don't over-engineer
+    2. Break down only when necessary
+    3. Ask clarifying questions early
+    4. Consider risk and blast radius
+    5. Identify assumptions that need validation
+
+  task: |
+    Analyze this task and determine the best execution strategy:
+
+    Task: {task.title}
+    Description: {task.description}
+    Priority: {task.priority}
+
+    Working directory: {context.working_directory}
+
+    Consider:
+    1. What's the actual scope? (lines of code, files affected, complexity)
+    2. Are requirements clear? What's ambiguous?
+    3. What are the risks?
+    4. Should this be one task or multiple subtasks?
+    5. What validation strategy is needed?
+
+    Output:
+    - If task is clear: Create triage-plan.yaml with execution strategy
+    - If clarification needed: Create feedback.md with questions
+    - If complex: Break into subtasks in triage-plan.yaml
+
+examples:
+  - input:
+      task: "Implement user authentication"
+      description: "Add JWT-based auth to API"
+    output:
+      decision: "complex - break into subtasks"
+      subtasks:
+        - "Research existing auth patterns in codebase"
+        - "Implement JWT token generation"
+        - "Implement auth middleware"
+        - "Add registration endpoint"
+        - "Add login endpoint"
+        - "Add token refresh logic"
+        - "Write tests"
+      rationale: "Auth is security-critical, multi-component, needs careful validation"
+
+  - input:
+      task: "Fix the bug in checkout"
+      description: "Nothing happens when user clicks checkout"
+    output:
+      decision: "clarification_needed"
+      questions:
+        - "Can you share error messages or console output?"
+        - "What should happen when checkout is clicked?"
+        - "When did this start happening?"
+      rationale: "Need to reproduce and understand expected behavior"
+
+  - input:
+      task: "Update button color to blue"
+      description: "Change submit button from red to blue"
+    output:
+      decision: "trivial - execute immediately"
+      approach: "Single file edit, no risk"
+      estimated_time: "30 seconds"
+
+container:
+  image: "claude-skill-triage:latest"
+  timeout: 300  # 5 minutes
+  resources:
+    memory: "512Mi"
+    cpu: "0.5"
+
+tools_available:
+  - Glob
+  - Grep
+  - Read
+  - Bash (readonly commands only)

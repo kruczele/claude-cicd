@@ -1,0 +1,378 @@
+# Verification results from verify skill
+# Records what was tested and outcomes
+
+version: "1.0"
+schema_type: "verification-results"
+
+# Frontmatter (YAML)
+---
+task_id: string
+strategy_id: string
+verification_id: string   # Unique ID for this verification run
+iteration: integer
+attempt_number: integer   # How many times we've tried to verify this task
+skill: "verify"
+
+# Overall status
+status: enum              # "passed", "failed", "partial", "error"
+started_at: timestamp
+completed_at: timestamp
+duration_seconds: integer
+
+# Check counts
+total_checks: integer
+passed_checks: integer
+failed_checks: integer
+skipped_checks: integer
+error_checks: integer     # Checks that couldn't run due to errors
+
+# CI integration
+ci_status: enum           # "passed", "failed", "pending", "not_run"
+ci_url: string?
+pr_status: enum?          # "approved", "changes_requested", "pending"
+
+# Decision
+can_proceed: boolean      # Can we merge/complete?
+requires_devils_advocate: boolean  # Should we trigger meta-analysis?
+
+# Markdown body follows
+---
+
+# Markdown content
+
+## Summary
+
+Quick overview of results.
+
+---
+
+## ✅ Passed Checks ({count}/{total})
+
+List successful validations.
+
+---
+
+## ❌ Failed Checks ({count}/{total})
+
+For each failure:
+
+### {N}. {Check Name}
+**Severity:** CRITICAL | HIGH | MEDIUM | LOW
+
+**Location:** `file/path.ts:line`
+
+**Error:**
+```
+Actual error message
+```
+
+**Hypothesis:**
+What might be causing this
+
+**Recommended Fix:**
+Specific action to take
+
+**Related Failures:**
+Links to similar issues if patterns emerge
+
+---
+
+## ⏭️ Skipped Checks ({count}/{total})
+
+Checks not run (usually due to earlier failures blocking them).
+
+---
+
+## 📊 Detailed Results
+
+Test output, coverage reports, CI logs.
+
+---
+
+## PR Comments
+
+Review feedback to address.
+
+---
+
+## Next Actions
+
+What should happen next:
+- Fix and retry
+- Escalate to user
+- Trigger devils-advocate
+
+---
+# EXAMPLE: Verification results with failures
+
+---
+task_id: "task-001"
+strategy_id: "verify-001"
+verification_id: "run-003"
+iteration: 3
+attempt_number: 3
+skill: "verify"
+
+status: "failed"
+started_at: "2026-02-13T14:22:00Z"
+completed_at: "2026-02-13T14:27:32Z"
+duration_seconds: 332
+
+total_checks: 24
+passed_checks: 20
+failed_checks: 3
+skipped_checks: 1
+error_checks: 0
+
+ci_status: "failed"
+ci_url: "https://github.com/user/repo/actions/runs/12345"
+pr_status: "pending"
+
+can_proceed: false
+requires_devils_advocate: true  # 3rd failure on same issues
+---
+
+## Summary
+
+**Status: ❌ FAILED (Attempt 3/5)**
+
+Third verification attempt still failing. Same core issues persist despite fixes:
+- Token refresh endpoint returns 401
+- Security vulnerability in dependency
+
+Passed all other checks including unit tests, linting, and code quality.
+
+**⚠️ Triggering Devils-Advocate** - Pattern suggests fundamental assumption issue.
+
+---
+
+## ✅ Passed Checks (20/24)
+
+### Unit Tests
+- ✅ `src/auth/jwt.test.ts` - All 15 tests passing
+- ✅ `src/auth/password.test.ts` - All 8 tests passing
+- ✅ `src/middleware/auth.test.ts` - All 12 tests passing
+- ✅ `src/routes/auth.test.ts` - 8/10 tests passing (2 failing, see below)
+
+### Code Quality
+- ✅ Linting passed - 0 errors, 0 warnings
+- ✅ TypeScript compilation clean
+- ✅ No console.log statements found
+- ✅ Follows project code style
+
+### Security Checks
+- ✅ No hardcoded secrets detected
+- ✅ SQL parameterization verified
+- ✅ CORS configured correctly
+- ✅ Password hashing verified (bcrypt, cost 12)
+
+### Documentation
+- ✅ `.env.example` updated
+- ✅ Inline comments present
+- ✅ README has setup instructions
+
+### Build & Basic Functionality
+- ✅ Build succeeds
+- ✅ Application starts
+- ✅ Health check responds
+- ✅ Existing endpoints unaffected
+
+### Coverage
+- ✅ Overall coverage: 84% (meets ≥80% requirement)
+- ✅ Auth module coverage: 92%
+
+---
+
+## ❌ Failed Checks (3/24)
+
+### 1. Integration Test: Token Refresh Endpoint
+**Severity:** CRITICAL
+
+**Location:** `tests/integration/auth.test.ts:67`
+
+**Error:**
+```
+FAIL tests/integration/auth.test.ts
+  ● Token refresh flow › should accept valid refresh token and return new access token
+
+    Expected status 200, received 401
+
+    Request:
+      POST /api/auth/refresh
+      Headers: { Authorization: "Bearer <refresh_token>" }
+
+    Response:
+      { "error": "Invalid token" }
+
+    at Object.<anonymous> (tests/integration/auth.test.ts:73)
+```
+
+**Hypothesis:**
+Despite previous fixes to:
+1. Token persistence logic (attempt 1)
+2. Middleware validation (attempt 2)
+3. Token signing (attempt 3)
+
+The refresh endpoint continues to fail authentication. Unit tests pass but integration fails - suggests issue in the integration between components, not individual components themselves.
+
+**Debug Log Analysis:**
+```
+[DEBUG] Refresh token received: eyJhbGc...
+[DEBUG] Token signature valid: true
+[DEBUG] Token payload: { userId: "123", type: "refresh", iat: ... }
+[DEBUG] Looking up user with ID: "123"
+[DEBUG] Database query returned: null
+[DEBUG] User not found, returning 401
+```
+
+Token is valid, but user lookup fails. **Type mismatch suspected** - token has string "123", database expects integer 123.
+
+**Recommended Fix:**
+Investigate token payload type vs database ID type.
+
+**Related Failures:**
+This has failed in all 3 attempts with different fixes applied, suggesting root cause not yet identified.
+
+---
+
+### 2. Integration Test: Concurrent Token Validation
+**Severity:** HIGH
+
+**Location:** `tests/integration/auth.test.ts:92`
+
+**Error:**
+```
+FAIL tests/integration/auth.test.ts
+  ● Protected routes › should handle 10 concurrent requests with same token
+
+    Expected all responses to be 200, but got:
+    [200, 200, 401, 200, 401, 200, 200, 401, 200, 200]
+
+    at Object.<anonymous> (tests/integration/auth.test.ts:98)
+```
+
+**Hypothesis:**
+Intermittent failures under concurrent load suggest race condition or state sharing in middleware.
+
+**Recommended Fix:**
+Verify middleware is truly stateless. Check if database connection pooling has issues.
+
+---
+
+### 3. CI Security Scan: Dependency Vulnerability
+**Severity:** MEDIUM
+
+**Location:** CI Pipeline - Security stage
+
+**Error:**
+```
+npm audit report
+
+jsonwebtoken  <9.0.0
+Severity: moderate
+Security token bypass in jsonwebtoken
+More info: https://github.com/advisories/GHSA-8cf7-32gw-wr33
+```
+
+**Hypothesis:**
+We're using `jsonwebtoken@8.5.1` but vulnerability is fixed in 9.0.0.
+
+**Recommended Fix:**
+```bash
+npm install jsonwebtoken@9.0.0
+npm audit fix
+```
+
+Should be straightforward upgrade. Check for breaking changes in v9.
+
+---
+
+## ⏭️ Skipped Checks (1/24)
+
+- **Performance Benchmarks** - Skipped due to test failures (no point benchmarking broken code)
+
+---
+
+## 📊 Detailed Results
+
+### Test Output Summary
+```
+Test Suites: 3 passed, 1 failed, 4 total
+Tests:       41 passed, 2 failed, 43 total
+Snapshots:   0 total
+Time:        12.485s
+
+Coverage:
+  Statements: 84.2% ( 234/278 )
+  Branches:   78.5% ( 66/84 )
+  Functions:  87.3% ( 48/55 )
+  Lines:      84.8% ( 219/258 )
+```
+
+### CI Pipeline Details
+```
+✅ Build             (22s)
+✅ Lint              (8s)
+✅ Type Check        (11s)
+❌ Test              (45s) - 2 integration tests failed
+⏭️ Coverage Report   (skipped - tests failed)
+❌ Security Scan     (15s) - 1 moderate vulnerability
+```
+
+### Database State After Tests
+```sql
+-- Users created during test
+SELECT id, email FROM users WHERE email LIKE 'test%';
+
+ id  |           email
+-----+---------------------------
+ 123 | test-user-1@example.com
+ 124 | test-user-2@example.com
+
+-- Type of ID column
+SELECT data_type FROM information_schema.columns
+WHERE table_name = 'users' AND column_name = 'id';
+
+ data_type
+-----------
+ integer
+```
+
+**☢️ SMOKING GUN:** Database `id` is `integer` type!
+
+### Token Payload Inspection
+```javascript
+// From debug logs - what we're storing in token:
+const payload = {
+  userId: user.id.toString(),  // <-- Converted to STRING
+  email: user.email,
+  type: "refresh"
+};
+```
+
+**ROOT CAUSE CONFIRMED:** We're storing `userId: "123"` (string) but querying with integer type.
+
+---
+
+## PR Comments
+
+No reviewer comments yet - PR is in draft mode pending tests passing.
+
+---
+
+## Next Actions
+
+### Immediate
+1. **✅ TRIGGER DEVILS-ADVOCATE** - Attempt 3 failed, need assumption analysis
+2. **FIX**: Remove `.toString()` from token payload generation in `src/auth/jwt.ts:23`
+3. **OR**: Add type coercion in database query: `parseInt(userId, 10)`
+4. **FIX**: Upgrade jsonwebtoken to 9.0.0
+5. **INVESTIGATE**: Concurrent access race condition
+
+### After Fixes
+1. Re-run full verification
+2. If still failing → manual user escalation
+3. If passing → create PR for review
+
+### Pattern Recognition
+This failure pattern (valid components, broken integration) suggests we should add more integration tests early in validation strategy.

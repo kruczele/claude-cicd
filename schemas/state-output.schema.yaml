@@ -1,0 +1,162 @@
+# State document produced by execution skills
+# Captures what was done and what's needed for resume
+
+version: "1.0"
+schema_type: "state-output"
+
+# Frontmatter (YAML)
+---
+task_id: string
+iteration: integer
+skill: string
+status: enum              # "completed", "in_progress", "blocked", "needs_feedback"
+completion_percentage: integer  # 0-100
+
+# Git state
+git:
+  branch_status: enum     # "not_started", "local", "pushed", "pr_created"
+  pr_number: integer?
+  pr_url: string?
+  commits: array<string>  # List of commit SHAs
+
+# Execution metrics
+metrics:
+  files_modified: integer
+  files_created: integer
+  files_deleted: integer
+  tests_written: integer
+  execution_time_seconds: integer
+
+# Iteration control
+next_iteration_needed: boolean
+next_skill: string?       # Which skill should run next
+
+# Markdown body follows
+---
+
+# Markdown content (freeform, human-readable)
+
+## What I Completed
+- Bullet list of completed work
+- Be specific with file paths and line numbers
+
+## Current State
+Where things stand now. What's in-flight.
+
+## Decisions Made
+Key choices and rationale:
+  - Why approach X over Y
+  - Trade-offs considered
+
+## Code Changes Summary
+Brief overview of the implementation:
+  - Architecture patterns used
+  - Key files and their purpose
+  - Dependencies added/removed
+
+## Next Steps
+1. Numbered list of what should happen next
+2. Prioritized order
+3. Any dependencies between steps
+
+## Notes for Resume
+Context needed if this gets picked up later:
+- Important state that's not obvious from code
+- Gotchas or quirks discovered
+- Links to relevant documentation
+
+---
+# EXAMPLE: Execute skill output
+
+---
+task_id: "task-001"
+iteration: 2
+skill: "execute"
+status: "in_progress"
+completion_percentage: 65
+
+git:
+  branch_status: "pushed"
+  pr_number: null
+  commits:
+    - "a1b2c3d"
+    - "e4f5g6h"
+
+metrics:
+  files_modified: 5
+  files_created: 3
+  files_deleted: 0
+  tests_written: 12
+  execution_time_seconds: 420
+
+next_iteration_needed: true
+next_skill: "execute"
+---
+
+## What I Completed
+
+- ✅ Set up JWT infrastructure in `/src/auth/jwt.ts`
+- ✅ Implemented token generation with 15min TTL
+- ✅ Created authentication middleware in `/src/middleware/auth.ts`
+- ✅ Added user registration endpoint `/api/auth/register` at `src/routes/auth.ts:12`
+- ✅ Added login endpoint `/api/auth/login` at `src/routes/auth.ts:45`
+- ✅ Wrote 12 unit tests covering token operations
+
+## Current State
+
+Working on token refresh mechanism. Basic structure is in place but awaiting user decision on storage strategy (see feedback.md).
+
+Routes are functional but not yet protected - need to wire middleware into route definitions.
+
+## Decisions Made
+
+**JWT Library:** Chose `jsonwebtoken` over `jose`
+- Rationale: More mature, better TypeScript support, team familiarity
+- Trade-off: Slightly larger bundle, but negligible for backend
+
+**Token Payload:** Storing minimal data (user_id, email, issued_at)
+- Rationale: Keep tokens small, reduce exposure if leaked
+- Trade-off: Need database lookup on each request, but acceptable with caching
+
+**Password Hashing:** Using bcrypt with cost factor 12
+- Rationale: Industry standard, good security/performance balance
+- Trade-off: Slightly slower than argon2, but more portable
+
+## Code Changes Summary
+
+```
+src/
+├── auth/
+│   ├── jwt.ts          # Token generation & validation
+│   ├── password.ts     # Password hashing utilities
+│   └── types.ts        # TypeScript interfaces
+├── middleware/
+│   └── auth.ts         # Express middleware for route protection
+├── routes/
+│   └── auth.ts         # Registration & login endpoints
+└── tests/
+    └── auth/
+        ├── jwt.test.ts
+        └── middleware.test.ts
+```
+
+**Dependencies added:**
+- `jsonwebtoken@9.0.0`
+- `bcrypt@5.1.1`
+- `@types/jsonwebtoken@9.0.1`
+- `@types/bcrypt@5.0.0`
+
+## Next Steps
+
+1. **Awaiting user input:** Token refresh storage strategy (see feedback.md Q1)
+2. Once decided, implement refresh token persistence
+3. Wire auth middleware into protected routes
+4. Add rate limiting to auth endpoints
+5. Write integration tests for full auth flow
+
+## Notes for Resume
+
+- Database connection pool already configured in `src/db/pool.ts`
+- User table schema is at `migrations/001_create_users.sql`
+- Environment variables needed: `JWT_SECRET`, `JWT_EXPIRES_IN`
+- The existing `/api/users` endpoints will need middleware added once auth is complete

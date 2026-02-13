@@ -1,0 +1,269 @@
+# SKILL: Devils-Advocate
+# Meta-analysis when verification fails repeatedly
+
+name: "devils-advocate"
+version: "1.0"
+description: |
+  Performs deep analysis when verification fails multiple times.
+  Questions assumptions, identifies root causes, detects patterns.
+  The "step back and think" safety valve.
+
+inputs:
+  - task-input.yaml                # Original task
+  - verification-history/          # All verification attempts
+  - state.md                       # Execution history
+  - validation-strategy.md         # Test plan
+  - git commits                    # All changes made
+
+outputs:
+  - assumption-analysis.md         # Root cause analysis
+  - recommended-fix.md             # Actionable solution (optional)
+
+trigger_conditions:
+  repeated_failures:
+    threshold: 3
+    condition: "Same test failing 3+ times"
+
+  circular_fixes:
+    condition: "Fixes undo previous changes"
+    indicator: "Git diff shows reversions"
+
+  increasing_complexity:
+    condition: "Each fix makes code more complex"
+    indicator: "File size growing without progress"
+
+  manual_request:
+    condition: "User explicitly triggers analysis"
+
+responsibilities:
+  - Question all assumptions made during implementation
+  - Identify patterns in failures
+  - Perform root cause analysis
+  - Check for integration issues (components work alone, fail together)
+  - Verify data contracts (types, schemas, formats)
+  - Detect environmental issues
+  - Propose fundamental fixes (not patches)
+  - Learn lessons for future
+
+analysis_framework:
+  1_gather_evidence:
+    - Read all verification results
+    - Examine all fixes attempted
+    - Review original requirements
+    - Check code changes history
+    - Inspect test outputs and logs
+
+  2_identify_patterns:
+    - What keeps failing?
+    - What fixes were tried?
+    - Why did each fix fail?
+    - Are we solving symptoms or causes?
+    - Any circular patterns?
+
+  3_question_assumptions:
+    - List all assumptions from validation-strategy
+    - For each: Is it actually true?
+    - What evidence validates/refutes each?
+    - Which assumption, if wrong, explains failures?
+
+  4_hypothesis_generation:
+    - What's the actual root cause?
+    - Why wasn't it caught earlier?
+    - What category of bug is this?
+
+  5_solution_design:
+    - What's the fundamental fix?
+    - Why will this work when others failed?
+    - How to validate the fix?
+    - How to prevent similar issues?
+
+common_root_causes:
+  type_mismatch:
+    description: "Data types don't match at boundaries"
+    examples:
+      - "String ID in token, integer ID in database"
+      - "Date string vs Date object"
+      - "null vs undefined"
+    detection: "Check type boundaries: API, DB, token payloads"
+
+  timing_issue:
+    description: "Race conditions or async problems"
+    examples:
+      - "Promise not awaited"
+      - "Callback fires after component unmounts"
+      - "Database transaction isolation"
+    detection: "Look for intermittent failures, concurrency tests"
+
+  state_management:
+    description: "Shared state or side effects"
+    examples:
+      - "Global variable modified"
+      - "Singleton not thread-safe"
+      - "Database state persists between tests"
+    detection: "Check for test order dependencies"
+
+  environment:
+    description: "Config or dependency issue"
+    examples:
+      - "Environment variable not set"
+      - "Different dependency versions"
+      - "File permissions"
+    detection: "Compare working vs failing environments"
+
+  assumption_violation:
+    description: "Core assumption was wrong"
+    examples:
+      - "Assumed library API works differently"
+      - "Assumed database auto-coerces types"
+      - "Assumed middleware execution order"
+    detection: "Check assumptions list, test each explicitly"
+
+  integration:
+    description: "Components work alone, fail together"
+    examples:
+      - "Unit tests pass, integration fails"
+      - "Different error handling between layers"
+      - "Data transformation lost between components"
+    detection: "Compare unit vs integration test results"
+
+  configuration:
+    description: "Wrong config or missing setup"
+    examples:
+      - "CORS not configured"
+      - "Database migration not run"
+      - "Feature flag off"
+    detection: "Check setup steps, compare to working system"
+
+prompts:
+  system: |
+    You are a principal engineer doing root cause analysis.
+
+    A task has failed verification 3+ times. Something fundamental is wrong.
+    Your job is to find the REAL problem, not just another symptom.
+
+    Principles:
+    1. Question everything - especially "obvious" assumptions
+    2. Look at boundaries - where systems meet (types, APIs, schemas)
+    3. Consider the simplest explanation first
+    4. Gather evidence, don't speculate
+    5. Think like a debugger, not a feature developer
+
+    You have the full history of attempts. Use it to detect patterns.
+
+  task: |
+    Perform root cause analysis for this failing task:
+
+    Task: {task.title}
+    Failed attempts: {failed_attempts}
+    Total time spent: {total_time_spent_seconds}s
+
+    Verification history: {read verification-history/}
+
+    Original assumptions: {read validation-strategy.md | extract assumptions}
+
+    Code changes: {git diff main...{target_branch}}
+
+    Your analysis should:
+
+    1. **Identify the pattern**
+       - What keeps failing?
+       - What fixes were tried?
+       - Why did each fail?
+
+    2. **Question assumptions**
+       - List all assumptions
+       - Mark which are proven true/false
+       - Identify which, if wrong, explains failures
+
+    3. **Find root cause**
+       - What's the actual problem?
+       - What category? (type, timing, state, env, assumption, integration, config)
+       - What's the evidence?
+       - Confidence level (0.0-1.0)
+
+    4. **Recommend solution**
+       - What's the fundamental fix?
+       - Why will this work?
+       - How to validate?
+       - Alternative approaches?
+
+    5. **Extract lessons**
+       - What pattern should we remember?
+       - How to catch this earlier next time?
+       - Project-specific vs general principle?
+
+    Output assumption-analysis.md with your findings.
+
+investigation_techniques:
+  schema_inspection:
+    description: "Check actual data structure vs expected"
+    commands:
+      - "psql -c '\\d table_name'  # PostgreSQL schema"
+      - "mysql DESCRIBE table_name  # MySQL schema"
+      - "cat schema.json | jq '.properties'"
+
+  type_inspection:
+    description: "Check runtime types"
+    commands:
+      - "node -e 'console.log(typeof value, value)'"
+      - "python -c 'print(type(value), value)'"
+      - "Add typeof to debug logs"
+
+  timeline_reconstruction:
+    description: "Understand what happened when"
+    commands:
+      - "git log --oneline --graph"
+      - "grep 'timestamp' logs/* | sort"
+      - "Compare test execution order"
+
+  diff_analysis:
+    description: "Compare working vs broken state"
+    commands:
+      - "git diff working-commit broken-commit"
+      - "diff <(working-env) <(broken-env)"
+      - "Compare test vs production configs"
+
+  minimal_reproduction:
+    description: "Strip to smallest failing example"
+    approach:
+      - "Remove code until it works"
+      - "That last removal revealed the bug"
+      - "Now understand why it fails"
+
+confidence_levels:
+  high: 0.9-1.0
+    - Direct evidence of root cause
+    - Clear causal relationship
+    - Explains all observed failures
+
+  medium: 0.7-0.89
+    - Strong circumstantial evidence
+    - Explains most failures
+    - Some uncertainty remains
+
+  low: 0.5-0.69
+    - Hypothesis supported by some evidence
+    - May be one of several causes
+    - Need more investigation
+
+  speculative: 0.0-0.49
+    - Guess based on experience
+    - Weak evidence
+    - Many alternative explanations
+
+auto_fix_threshold: 0.85
+  # Only auto-apply fix if confidence >= 0.85
+
+container:
+  image: "claude-skill-devils-advocate:latest"
+  timeout: 600  # 10 minutes
+  resources:
+    memory: "2Gi"
+    cpu: "1"
+
+tools_available:
+  - Read
+  - Glob
+  - Grep
+  - Bash (full access for investigation)
+  - Task (for spawning deep-dive analyses)

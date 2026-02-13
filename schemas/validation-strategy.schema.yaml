@@ -1,0 +1,365 @@
+# Validation strategy produced by pre-verify skill
+# Defines how to validate that changes meet requirements
+
+version: "1.0"
+schema_type: "validation-strategy"
+
+# Frontmatter (YAML)
+---
+task_id: string
+strategy_id: string       # Unique ID for this validation plan
+iteration: integer
+skill: "pre-verify"
+
+validation_scope: enum    # "smoke", "targeted", "full", "comprehensive"
+estimated_duration_seconds: integer
+estimated_cost: enum      # "low", "medium", "high" (for CI resources)
+
+# Success criteria counts
+total_checks: integer
+critical_checks: integer  # Must pass
+optional_checks: integer  # Nice to have
+
+# Markdown body follows
+---
+
+# Markdown content
+
+## Success Criteria
+
+Clear, measurable definition of "done":
+- List specific criteria
+- Each should be verifiable
+
+---
+
+## Unit Tests
+
+### Tests to Run
+- Specific test files or patterns
+- New tests that should exist
+
+### Coverage Requirements
+- Minimum coverage percentage
+- Critical paths that must be tested
+
+---
+
+## Integration Tests
+
+### Test Scenarios
+- End-to-end flows to verify
+- API contracts to validate
+- Database interactions to check
+
+### Test Data Requirements
+- What fixtures or seed data needed
+
+---
+
+## Manual Checks
+
+### Code Quality
+- [ ] Linting passes
+- [ ] TypeScript compilation clean
+- [ ] No console.log or debug statements
+- [ ] Code follows project conventions
+
+### Documentation
+- [ ] Updated README if needed
+- [ ] Inline comments for complex logic
+- [ ] API documentation updated
+
+### Security
+- [ ] No hardcoded secrets
+- [ ] Input validation present
+- [ ] SQL injection prevention
+- [ ] XSS prevention
+
+---
+
+## CI/CD Checks
+
+### Required Pipeline Stages
+- Build must succeed
+- All test suites must pass
+- Security scan must pass
+- Coverage threshold met
+
+### PR Requirements
+- [ ] All review comments addressed
+- [ ] Approved by required reviewers
+- [ ] Branch up to date with main
+
+---
+
+## Assumptions Being Validated
+
+Critical assumptions made during implementation:
+1. Assumption statement
+   - How we're testing it
+   - What could go wrong if false
+
+This section is KEY for devils-advocate later.
+
+---
+
+## Edge Cases
+
+Boundary conditions and error scenarios:
+- Empty inputs
+- Invalid data types
+- Race conditions
+- Concurrent access
+- Resource exhaustion
+
+---
+
+## Regression Checks
+
+Existing functionality that must still work:
+- Specific features to verify
+- Performance benchmarks to maintain
+
+---
+# EXAMPLE: Pre-verify output for auth task
+
+---
+task_id: "task-001"
+strategy_id: "verify-001"
+iteration: 2
+skill: "pre-verify"
+
+validation_scope: "full"
+estimated_duration_seconds: 300
+estimated_cost: "medium"
+
+total_checks: 24
+critical_checks: 18
+optional_checks: 6
+---
+
+## Success Criteria
+
+✅ Implementation is complete when:
+1. Users can register with email/password
+2. Users can login and receive valid JWT token
+3. Protected endpoints reject requests without token
+4. Protected endpoints accept requests with valid token
+5. Tokens expire after configured TTL
+6. All tests pass
+7. CI pipeline is green
+8. Code coverage ≥ 80% for new code
+
+---
+
+## Unit Tests
+
+### Tests to Run
+```bash
+npm test src/auth/jwt.test.ts
+npm test src/auth/password.test.ts
+npm test src/middleware/auth.test.ts
+npm test src/routes/auth.test.ts
+```
+
+### Required Test Coverage
+- ✅ **CRITICAL**: `src/auth/jwt.ts` - Token generation, validation, expiry
+- ✅ **CRITICAL**: `src/auth/password.ts` - Hashing, comparison
+- ✅ **CRITICAL**: `src/middleware/auth.ts` - Request interception, token extraction
+- ✅ **HIGH**: `src/routes/auth.ts` - Registration, login endpoints
+
+### Coverage Requirements
+- Overall: ≥ 80%
+- Auth module: ≥ 90% (critical security code)
+- New lines: 100% (no untested new code)
+
+---
+
+## Integration Tests
+
+### Test Scenarios
+
+#### 1. Full Registration Flow
+```
+POST /api/auth/register
+  → 201 Created with user ID
+  → User exists in database
+  → Password is hashed (not plaintext)
+```
+
+#### 2. Login Flow
+```
+POST /api/auth/login with valid credentials
+  → 200 OK with access token
+  → Token is valid JWT
+  → Token contains correct user_id
+```
+
+#### 3. Protected Route Access
+```
+GET /api/protected/resource without token
+  → 401 Unauthorized
+
+GET /api/protected/resource with valid token
+  → 200 OK with data
+
+GET /api/protected/resource with expired token
+  → 401 Unauthorized with "token expired" message
+```
+
+#### 4. Invalid Credentials
+```
+POST /api/auth/login with wrong password
+  → 401 Unauthorized
+  → Generic error message (don't leak "user exists")
+```
+
+### Test Data Requirements
+- Test database with clean state
+- Test user fixtures (valid/invalid emails, passwords)
+- Expired token samples
+
+---
+
+## Manual Checks
+
+### Code Quality
+- [ ] **CRITICAL**: `npm run lint` passes
+- [ ] **CRITICAL**: `npm run type-check` passes (TypeScript)
+- [ ] No `console.log`, `debugger`, or `TODO` comments
+- [ ] Error messages don't leak sensitive info
+- [ ] Code follows existing patterns in `/src/routes/`
+
+### Documentation
+- [ ] `.env.example` includes `JWT_SECRET`, `JWT_EXPIRES_IN`
+- [ ] README updated with auth setup instructions
+- [ ] Inline comments explain non-obvious logic (especially middleware)
+
+### Security
+- [ ] **CRITICAL**: No hardcoded secrets in code
+- [ ] **CRITICAL**: Passwords never logged or returned in responses
+- [ ] **CRITICAL**: JWT secret read from environment
+- [ ] SQL queries use parameterized statements (no string concat)
+- [ ] CORS configured appropriately
+- [ ] Rate limiting present (or documented as follow-up)
+
+---
+
+## CI/CD Checks
+
+### Required Pipeline Stages
+1. **Build** - `npm run build` succeeds
+2. **Lint** - `npm run lint` exits 0
+3. **Type Check** - `npm run type-check` exits 0
+4. **Unit Tests** - `npm test` all pass
+5. **Integration Tests** - `npm run test:integration` all pass
+6. **Security Scan** - `npm audit` no high/critical vulnerabilities
+7. **Coverage** - `npm run test:coverage` meets threshold
+
+### PR Requirements
+- [ ] All CI checks green
+- [ ] No merge conflicts with main
+- [ ] PR description explains changes
+- [ ] All review comments resolved or addressed
+
+---
+
+## Assumptions Being Validated
+
+### 1. JWT Library Correctness
+**Assumption:** `jsonwebtoken` library correctly signs and verifies tokens
+**Testing:** Unit tests with known token/secret pairs, verify signatures
+**Risk if wrong:** Tokens could be forged, complete auth bypass
+
+### 2. Middleware Execution Order
+**Assumption:** Auth middleware runs before route handlers for protected routes
+**Testing:** Integration test verifies 401 before handler code executes
+**Risk if wrong:** Protected routes exposed publicly
+
+### 3. Database User ID Type
+**Assumption:** User IDs in tokens match database ID type (integer vs string)
+**Testing:** Integration test validates user lookup succeeds
+**Risk if wrong:** Valid tokens fail to authenticate (the sync device example!)
+
+### 4. Token Expiry Timing
+**Assumption:** System clocks are synchronized, token timestamps valid
+**Testing:** Test with tokens set to expire in 1 second, verify rejection
+**Risk if wrong:** Expired tokens accepted, or valid tokens rejected
+
+### 5. Password Hash Cost Factor
+**Assumption:** bcrypt cost 12 is acceptable performance (< 500ms)
+**Testing:** Benchmark password hashing in tests
+**Risk if wrong:** Login endpoint too slow, DoS vector
+
+### 6. Concurrent Request Handling
+**Assumption:** Middleware is stateless and thread-safe
+**Testing:** Integration test with 10 concurrent requests same token
+**Risk if wrong:** Race conditions, inconsistent auth state
+
+---
+
+## Edge Cases
+
+### Token Validation
+- [ ] Expired token (TTL exceeded)
+- [ ] Malformed token (not valid JWT structure)
+- [ ] Token signed with different secret
+- [ ] Token with missing required fields (user_id)
+- [ ] Token with unexpected extra fields
+
+### Registration
+- [ ] Duplicate email registration
+- [ ] Invalid email format
+- [ ] Empty password
+- [ ] Very long password (> 1000 chars)
+- [ ] SQL injection in email field
+- [ ] XSS attempt in email/username
+
+### Login
+- [ ] Non-existent user
+- [ ] Correct email, wrong password
+- [ ] Empty credentials
+- [ ] Brute force attempt (rapid requests)
+
+### Protected Routes
+- [ ] No Authorization header
+- [ ] Malformed Authorization header
+- [ ] "Bearer" prefix missing
+- [ ] Token with extra whitespace
+
+---
+
+## Regression Checks
+
+### Existing Functionality
+- [ ] **CRITICAL**: Existing `/api/users` endpoints still work
+- [ ] **CRITICAL**: Database migrations don't break existing tables
+- [ ] **HIGH**: Other routes not affected by middleware changes
+- [ ] **MEDIUM**: Application still starts successfully
+- [ ] **MEDIUM**: Health check endpoint still responds
+
+### Performance
+- [ ] Login response time < 500ms (p95)
+- [ ] Token validation overhead < 10ms per request
+- [ ] No memory leaks in long-running tests
+
+---
+
+## Test Execution Order
+
+1. **Fast Checks First** (< 10 sec)
+   - Linting
+   - Type checking
+   - Unit tests
+
+2. **Medium Checks** (< 60 sec)
+   - Integration tests
+   - Build
+
+3. **Slow Checks** (< 300 sec)
+   - Full test suite with coverage
+   - Security scans
+   - Performance benchmarks
+
+**Fail fast:** Stop on first critical failure to save CI time.

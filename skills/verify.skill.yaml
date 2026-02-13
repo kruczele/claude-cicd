@@ -1,0 +1,218 @@
+# SKILL: Verify
+# Executes validation strategy and reports results
+
+name: "verify"
+version: "1.0"
+description: |
+  Executes the validation strategy created by pre-verify.
+  Runs tests, checks CI status, analyzes results.
+  Determines if changes are ready to merge or need fixes.
+
+inputs:
+  - task-input.yaml            # Original task
+  - validation-strategy.md     # Test plan to execute
+  - git commits                # Changes to verify
+
+outputs:
+  - verification-results.md    # Detailed results
+  - test-artifacts/            # Logs, coverage reports, etc.
+
+responsibilities:
+  - Execute all planned validation checks
+  - Monitor CI/CD pipeline status
+  - Analyze test failures
+  - Check code coverage
+  - Review security scan results
+  - Verify PR requirements
+  - Determine if verification passed
+  - Identify failure patterns
+  - Recommend next actions
+
+workflow:
+  1_prepare:
+    - Read validation strategy
+    - Ensure clean working directory
+    - Verify environment setup
+
+  2_execute_fast_checks:
+    - Run linting
+    - Run type checking
+    - Quick syntax validation
+    - Fail fast if these fail
+
+  3_execute_unit_tests:
+    - Run unit test suite
+    - Capture output and coverage
+    - Note any failures
+
+  4_execute_integration_tests:
+    - Run integration tests
+    - Check database state
+    - Verify API contracts
+
+  5_check_ci_status:
+    - Poll CI pipeline
+    - Wait for completion (with timeout)
+    - Fetch CI logs if failed
+
+  6_manual_checks:
+    - Verify code quality criteria
+    - Check security requirements
+    - Validate documentation
+
+  7_analyze_results:
+    - Categorize failures (critical, high, medium, low)
+    - Identify patterns in failures
+    - Compare current attempt to previous attempts
+    - Determine if devils-advocate needed
+
+  8_report:
+    - Generate verification-results.md
+    - Include detailed failure info
+    - Provide fix recommendations
+    - Determine next action
+
+decision_tree:
+  all_passed:
+    action: "Mark task complete, ready for PR review"
+    next_skill: null
+
+  minor_failures:
+    action: "Fix and retry (attempt < 3)"
+    next_skill: "execute"
+
+  repeated_failures:
+    action: "Trigger devils-advocate (attempt >= 3)"
+    next_skill: "devils-advocate"
+
+  critical_failure:
+    action: "Escalate to user immediately"
+    next_skill: null
+
+  environment_issue:
+    action: "Report infrastructure problem"
+    next_skill: null
+
+prompts:
+  system: |
+    You are a QA automation engineer executing a test plan.
+
+    Your responsibilities:
+    1. Run all tests systematically
+    2. Collect comprehensive results
+    3. Analyze failures thoroughly
+    4. Provide actionable feedback
+    5. Detect failure patterns
+
+    Be thorough and precise. Every failure needs a clear hypothesis
+    and recommended fix.
+
+  task: |
+    Execute this validation strategy:
+
+    {read validation-strategy.md}
+
+    For the changes in task: {task.title}
+
+    Target branch: {git.target_branch}
+    Attempt number: {iteration}
+
+    Run all checks and report results in verification-results.md.
+
+    For each failure, provide:
+    - Severity (critical, high, medium, low)
+    - Location (file:line)
+    - Error message
+    - Hypothesis (what's wrong)
+    - Recommended fix
+
+    At the end, determine:
+    - Can we proceed? (yes/no)
+    - Should we trigger devils-advocate? (attempt >= 3 with same failures)
+    - What should happen next?
+
+failure_analysis:
+  pattern_detection:
+    - Compare current failures to previous attempts
+    - Identify recurring issues
+    - Check if fixes are effective or just changing symptoms
+    - Look for circular fixes (undoing previous changes)
+
+  hypothesis_generation:
+    - What's the most likely cause?
+    - What evidence supports this?
+    - What could we test to confirm?
+    - What's the simplest fix?
+
+  severity_classification:
+    critical:
+      - Security vulnerabilities
+      - Data loss risk
+      - Complete feature breakage
+      - Blocks all other work
+
+    high:
+      - Feature partially broken
+      - Integration failures
+      - Significant performance degradation
+
+    medium:
+      - Edge cases failing
+      - Non-critical features affected
+      - Code quality issues
+
+    low:
+      - Linting warnings
+      - Documentation gaps
+      - Minor style inconsistencies
+
+ci_integration:
+  github_actions:
+    - Check workflow status via gh CLI
+    - Fetch logs for failed jobs
+    - Monitor check runs
+
+test_execution:
+  unit:
+    command: "npm test"
+    timeout: 300
+    output: "test-artifacts/unit-results.json"
+
+  integration:
+    command: "npm run test:integration"
+    timeout: 600
+    output: "test-artifacts/integration-results.json"
+
+  coverage:
+    command: "npm run test:coverage"
+    timeout: 300
+    output: "test-artifacts/coverage/"
+
+  lint:
+    command: "npm run lint"
+    timeout: 60
+    output: "test-artifacts/lint-report.txt"
+
+  typecheck:
+    command: "npm run type-check"
+    timeout: 120
+    output: "test-artifacts/type-errors.txt"
+
+container:
+  image: "claude-skill-verify:latest"
+  timeout: 1200  # 20 minutes
+  resources:
+    memory: "4Gi"
+    cpu: "2"
+
+  volumes:
+    - name: "workspace"
+      path: "/workspace"
+    - name: "test-artifacts"
+      path: "/artifacts"
+
+tools_available:
+  - Read
+  - Bash
+  - Glob
+  - Grep
