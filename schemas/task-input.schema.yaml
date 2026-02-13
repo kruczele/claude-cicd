@@ -12,6 +12,7 @@ skill: string            # Which skill to execute: "triage", "execute", "pre-ver
 
 # Git context
 git:
+  repo_url: string        # Repository URL to clone (required for orchestration)
   target_branch: string   # Branch where changes should be committed
   main_branch: string     # Base branch (usually "main" or "master")
   pr_number: integer?     # If resuming work on existing PR
@@ -26,11 +27,12 @@ task:
 
 # Context and state
 context:
+  workspace_path: string?           # Host path to cloned repo (set by orchestrator)
   previous_state_path: string?      # Path to state.md from prior iteration
   user_responses_path: string?      # Path to user's answers to feedback.md
   validation_strategy_path: string? # For verify skill
   verification_history_path: string? # For devils-advocate skill
-  working_directory: string         # Absolute path to code repository
+  working_directory: string         # Path inside container (always /workspace)
 
 # Metadata
 metadata:
@@ -52,6 +54,7 @@ parent_task_id: null
 skill: "triage"
 
 git:
+  repo_url: "https://github.com/org/repo.git"
   target_branch: "feature/user-auth"
   main_branch: "main"
 
@@ -68,6 +71,7 @@ task:
   estimated_complexity: "unknown"
 
 context:
+  workspace_path: null  # Set by orchestrator
   working_directory: "/workspace"
 
 metadata:

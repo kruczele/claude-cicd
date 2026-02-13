@@ -14,6 +14,60 @@ import time
 
 
 # ============================================================================
+# Repo Setup
+# ============================================================================
+
+@task
+def clone_repo_shallow(
+    repo_url: str,
+    workspace_path: Path,
+    branch: str,
+    checkout_branch: str | None = None,
+    pr_number: int | None = None,
+) -> Path:
+    """
+    Shallow clone - minimal fetch for fast iteration.
+    Uses --depth 1 --single-branch --no-tags (typically <1min vs 30min full clone).
+    """
+    logger = get_run_logger()
+    workspace_path = Path(workspace_path)
+    workspace_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Resolve branch: if resuming PR, clone the PR branch; else clone base branch
+    clone_branch = branch
+    if pr_number:
+        clone_branch = checkout_branch or branch
+        logger.info(f"Resuming PR #{pr_number} - cloning branch {clone_branch}")
+
+    clone_cmd = [
+        "git", "clone",
+        "--depth", "1",
+        "--single-branch",
+        "--branch", clone_branch,
+        "--no-tags",
+        "--", repo_url, str(workspace_path)
+    ]
+    logger.info(f"Shallow cloning {repo_url} ({clone_branch}) -> {workspace_path}")
+
+    result = subprocess.run(clone_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        logger.error(f"Clone failed: {result.stderr}")
+        raise RuntimeError(f"git clone failed: {result.stderr}")
+
+    # Create working branch if different from clone branch
+    if checkout_branch and checkout_branch != clone_branch:
+        subprocess.run(
+            ["git", "checkout", "-b", checkout_branch],
+            cwd=workspace_path,
+            capture_output=True,
+            check=True,
+        )
+        logger.info(f"Checked out new branch {checkout_branch}")
+
+    return workspace_path
+
+
+# ============================================================================
 # Container Execution
 # ============================================================================
 
@@ -81,21 +135,22 @@ def run_skill_in_container(
 # ============================================================================
 
 @flow(name="triage-flow")
-def triage_flow(task_id: str, task_input_path: Path) -> Dict[str, Any]:
+def triage_flow(
+    task_id: str, task_input_path: Path, workspace_path: Path
+) -> Dict[str, Any]:
     """
     Analyzes task and determines execution strategy.
     """
     logger = get_run_logger()
     logger.info(f"Triaging task {task_id}")
 
-    workspace = Path("/workspace")
     output_path = Path(f"/artifacts/{task_id}/triage")
     output_path.mkdir(parents=True, exist_ok=True)
 
     result = run_skill_in_container(
         skill_name="triage",
         task_input_path=task_input_path,
-        workspace_path=workspace,
+        workspace_path=workspace_path,
         output_path=output_path
     )
 
@@ -106,6 +161,7 @@ def triage_flow(task_id: str, task_input_path: Path) -> Dict[str, Any]:
 def execute_flow(
     task_id: str,
     task_input_path: Path,
+    workspace_path: Path,
     iteration: int = 1
 ) -> Dict[str, Any]:
     """
@@ -114,14 +170,13 @@ def execute_flow(
     logger = get_run_logger()
     logger.info(f"Executing task {task_id} (iteration {iteration})")
 
-    workspace = Path("/workspace")
     output_path = Path(f"/artifacts/{task_id}/execute/iter-{iteration}")
     output_path.mkdir(parents=True, exist_ok=True)
 
     result = run_skill_in_container(
         skill_name="execute",
         task_input_path=task_input_path,
-        workspace_path=workspace,
+        workspace_path=workspace_path,
         output_path=output_path
     )
 
@@ -129,7 +184,9 @@ def execute_flow(
 
 
 @flow(name="pre-verify-flow")
-def pre_verify_flow(task_id: str, state_path: Path) -> Dict[str, Any]:
+def pre_verify_flow(
+    task_id: str, state_path: Path, workspace_path: Path
+) -> Dict[str, Any]:
     """
     Creates validation strategy.
     """
@@ -143,14 +200,13 @@ def pre_verify_flow(task_id: str, state_path: Path) -> Dict[str, Any]:
     temp_input = Path(f"/tmp/{task_id}-preverify-input.yaml")
     temp_input.write_text(yaml.dump(task_input))
 
-    workspace = Path("/workspace")
     output_path = Path(f"/artifacts/{task_id}/pre-verify")
     output_path.mkdir(parents=True, exist_ok=True)
 
     result = run_skill_in_container(
         skill_name="pre-verify",
         task_input_path=temp_input,
-        workspace_path=workspace,
+        workspace_path=workspace_path,
         output_path=output_path
     )
 
@@ -161,6 +217,7 @@ def pre_verify_flow(task_id: str, state_path: Path) -> Dict[str, Any]:
 def verify_flow(
     task_id: str,
     validation_strategy_path: Path,
+    workspace_path: Path,
     attempt_number: int = 1
 ) -> Dict[str, Any]:
     """
@@ -177,14 +234,13 @@ def verify_flow(
     temp_input = Path(f"/tmp/{task_id}-verify-input.yaml")
     temp_input.write_text(yaml.dump(task_input))
 
-    workspace = Path("/workspace")
     output_path = Path(f"/artifacts/{task_id}/verify/attempt-{attempt_number}")
     output_path.mkdir(parents=True, exist_ok=True)
 
     result = run_skill_in_container(
         skill_name="verify",
         task_input_path=temp_input,
-        workspace_path=workspace,
+        workspace_path=workspace_path,
         output_path=output_path
     )
 
@@ -192,7 +248,9 @@ def verify_flow(
 
 
 @flow(name="devils-advocate-flow")
-def devils_advocate_flow(task_id: str, verification_history_path: Path) -> Dict[str, Any]:
+def devils_advocate_flow(
+    task_id: str, verification_history_path: Path, workspace_path: Path
+) -> Dict[str, Any]:
     """
     Performs meta-analysis of repeated failures.
     """
@@ -206,14 +264,13 @@ def devils_advocate_flow(task_id: str, verification_history_path: Path) -> Dict[
     temp_input = Path(f"/tmp/{task_id}-devilsadvocate-input.yaml")
     temp_input.write_text(yaml.dump(task_input))
 
-    workspace = Path("/workspace")
     output_path = Path(f"/artifacts/{task_id}/devils-advocate")
     output_path.mkdir(parents=True, exist_ok=True)
 
     result = run_skill_in_container(
         skill_name="devils-advocate",
         task_input_path=temp_input,
-        workspace_path=workspace,
+        workspace_path=workspace_path,
         output_path=output_path
     )
 
@@ -227,27 +284,47 @@ def devils_advocate_flow(task_id: str, verification_history_path: Path) -> Dict[
 @flow(name="development-cycle", log_prints=True)
 def development_cycle(
     task_id: str,
+    repo_url: str,
     task_title: str,
     task_description: str,
     target_branch: str,
-    priority: str = "medium"
+    main_branch: str = "main",
+    priority: str = "medium",
+    workspace_base: str | Path = "/tmp/claude-workspaces",
+    pr_number: int | None = None,
+    workspace_path: Path | None = None,  # If provided and valid, skip clone (resume)
 ) -> str:
     """
     Complete development cycle: triage → execute → verify loop → PR.
 
-    This is the main orchestration flow that coordinates all skills.
-    Handles the full lifecycle including verification loops and
-    devils-advocate triggering.
+    Clones repo shallow (--depth 1) for fast iteration, then runs
+    triage → execute → verify. Handles full lifecycle including
+    verification loops and devils-advocate triggering.
 
     Returns:
         Status: "completed", "awaiting_user_input", "failed", "escalated"
     """
     logger = get_run_logger()
-    logger.info(f"Starting development cycle for task '{task_title}'")
+    logger.info(f"Starting development cycle for task '{task_title}' (repo: {repo_url})")
 
-    # Create task input manifest
     artifacts_base = Path(f"/artifacts/{task_id}")
     artifacts_base.mkdir(parents=True, exist_ok=True)
+
+    # Resume: reuse existing workspace if valid (same worker/machine)
+    ws_path = Path(workspace_path) if workspace_path else None
+    if ws_path and ws_path.exists() and (ws_path / ".git").exists():
+        workspace_path = ws_path
+        logger.info(f"Resuming - reusing workspace at {workspace_path}")
+    else:
+        # Clone: for PR resume (different worker), clone PR branch to get WIP
+        workspace_path = Path(workspace_base) / task_id
+        workspace_path = clone_repo_shallow(
+            repo_url=repo_url,
+            workspace_path=workspace_path,
+            branch=target_branch if pr_number else main_branch,
+            checkout_branch=target_branch if target_branch != main_branch else None,
+            pr_number=pr_number,
+        )
 
     task_input = {
         "task_id": task_id,
@@ -255,8 +332,10 @@ def development_cycle(
         "parent_task_id": None,
         "skill": "triage",
         "git": {
+            "repo_url": repo_url,
             "target_branch": target_branch,
-            "main_branch": "main"
+            "main_branch": main_branch,
+            "pr_number": pr_number
         },
         "task": {
             "title": task_title,
@@ -278,11 +357,12 @@ def development_cycle(
         }
     }
 
+    task_input["context"]["workspace_path"] = str(workspace_path)
     task_input_path = artifacts_base / "task-input.yaml"
     task_input_path.write_text(yaml.dump(task_input))
 
     # Step 1: Triage
-    triage_result = triage_flow(task_id, task_input_path)
+    triage_result = triage_flow(task_id, task_input_path, workspace_path)
 
     # Check if triage needs user input
     if "feedback" in triage_result["outputs"]:
@@ -294,7 +374,9 @@ def development_cycle(
     # If trivial, execute immediately and return
     if triage_plan.get("decision") == "trivial":
         logger.info("Trivial task - executing immediately")
-        execute_result = execute_flow(task_id, task_input_path, iteration=1)
+        execute_result = execute_flow(
+            task_id, task_input_path, workspace_path, iteration=1
+        )
 
         if execute_result["outputs"]["state"]["status"] == "completed":
             return "completed"
@@ -306,7 +388,9 @@ def development_cycle(
     while iteration <= max_iterations:
         logger.info(f"Execute iteration {iteration}")
 
-        execute_result = execute_flow(task_id, task_input_path, iteration)
+        execute_result = execute_flow(
+            task_id, task_input_path, workspace_path, iteration
+        )
         state = execute_result["outputs"]["state"]
 
         # Check for user questions
@@ -334,7 +418,7 @@ def development_cycle(
 
     # Step 3: Pre-verify
     state_path = artifacts_base / f"execute/iter-{iteration}" / "state.md"
-    preverify_result = pre_verify_flow(task_id, state_path)
+    preverify_result = pre_verify_flow(task_id, state_path, workspace_path)
 
     validation_strategy_path = artifacts_base / "pre-verify" / "validation-strategy.md"
 
@@ -345,7 +429,9 @@ def development_cycle(
     while verify_attempt <= max_verify_attempts:
         logger.info(f"Verification attempt {verify_attempt}")
 
-        verify_result = verify_flow(task_id, validation_strategy_path, verify_attempt)
+        verify_result = verify_flow(
+            task_id, validation_strategy_path, workspace_path, verify_attempt
+        )
         verification = verify_result["outputs"]["verification-results"]
 
         if verification["status"] == "passed":
@@ -357,7 +443,9 @@ def development_cycle(
             logger.info("🤔 Triggering devils-advocate analysis")
 
             verification_history_path = artifacts_base / "verify"
-            da_result = devils_advocate_flow(task_id, verification_history_path)
+            da_result = devils_advocate_flow(
+                task_id, verification_history_path, workspace_path
+            )
 
             analysis = da_result["outputs"]["assumption-analysis"]
 
@@ -374,7 +462,9 @@ def development_cycle(
                     task_input_path.write_text(yaml.dump(task_input))
 
                     # Execute fix
-                    fix_result = execute_flow(task_id, task_input_path, iteration + 1)
+                    fix_result = execute_flow(
+                        task_id, task_input_path, workspace_path, iteration + 1
+                    )
                     iteration += 1
 
                     # Re-verify
@@ -432,12 +522,17 @@ def process_user_feedback(
     task_input_path.write_text(yaml.dump(task_input))
 
     # Resume development cycle
+    git = task_input.get("git", {})
     return development_cycle(
         task_id=task_id,
+        repo_url=git.get("repo_url", ""),
         task_title=task_input["task"]["title"],
         task_description=task_input["task"]["description"],
         target_branch=task_input["git"]["target_branch"],
-        priority=task_input["task"]["priority"]
+        main_branch=git.get("main_branch", "main"),
+        priority=task_input["task"]["priority"],
+        pr_number=git.get("pr_number"),
+        workspace_path=Path(task_input["context"]["workspace_path"]) if task_input.get("context", {}).get("workspace_path") else None,
     )
 
 
@@ -454,9 +549,11 @@ if __name__ == "__main__":
         work_queue_name="claude-skills",
         parameters={
             "task_id": "task-example",
+            "repo_url": "https://github.com/org/repo.git",
             "task_title": "Example Task",
             "task_description": "This is an example task",
             "target_branch": "feature/example",
+            "main_branch": "main",
             "priority": "medium"
         }
     )

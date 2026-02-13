@@ -6,6 +6,7 @@ parent_task_id: null
 skill: "triage"  # Can be: triage, execute, pre-verify, verify, devils-advocate
 
 git:
+  repo_url: "https://github.com/org/repo.git"
   target_branch: "feature/example"
   main_branch: "main"
   pr_number: null
@@ -29,6 +30,7 @@ task:
   estimated_complexity: "simple"
 
 context:
+  workspace_path: null  # Set by orchestrator when running via Prefect
   previous_state_path: null
   user_responses_path: null
   validation_strategy_path: null
