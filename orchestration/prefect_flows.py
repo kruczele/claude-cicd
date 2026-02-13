@@ -4,8 +4,6 @@ Provides resilient, resumable development workflow.
 """
 
 from prefect import flow, task, get_run_logger
-from prefect.deployments import Deployment
-from prefect.server.schemas.schedules import CronSchedule
 import subprocess
 import yaml
 from pathlib import Path
@@ -49,7 +47,13 @@ def clone_repo_shallow(
     ]
     logger.info(f"Shallow cloning {repo_url} ({clone_branch}) -> {workspace_path}")
 
-    result = subprocess.run(clone_cmd, capture_output=True, text=True)
+    result = subprocess.run(
+        clone_cmd,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=300,
+    )
     if result.returncode != 0:
         logger.error(f"Clone failed: {result.stderr}")
         raise RuntimeError(f"git clone failed: {result.stderr}")
@@ -61,6 +65,7 @@ def clone_repo_shallow(
             cwd=workspace_path,
             capture_output=True,
             check=True,
+            stdin=subprocess.DEVNULL,
         )
         logger.info(f"Checked out new branch {checkout_branch}")
 
@@ -105,7 +110,13 @@ def run_skill_in_container(
     ]
 
     start_time = time.time()
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        stdin=subprocess.DEVNULL,
+        timeout=3600,
+    )
     duration = time.time() - start_time
 
     if result.returncode != 0:
@@ -541,24 +552,7 @@ def process_user_feedback(
 # ============================================================================
 
 if __name__ == "__main__":
-    # Create deployments for the flows
-
-    deployment = Deployment.build_from_flow(
-        flow=development_cycle,
-        name="claude-dev-cycle",
-        work_queue_name="claude-skills",
-        parameters={
-            "task_id": "task-example",
-            "repo_url": "https://github.com/org/repo.git",
-            "task_title": "Example Task",
-            "task_description": "This is an example task",
-            "target_branch": "feature/example",
-            "main_branch": "main",
-            "priority": "medium"
-        }
-    )
-
-    deployment.apply()
-
-    print("✅ Prefect flows deployed")
-    print("Start agent with: prefect agent start -q claude-skills")
+    # Deploy via: prefect deploy --all (from orchestration/)
+    # Or run locally: development_cycle.serve() or development_cycle()
+    print("Deploy: prefect deploy --all")
+    print("Run: prefect deployment run 'development-cycle/claude-dev-cycle' --param ...")
