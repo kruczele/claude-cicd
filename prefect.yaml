@@ -25,4 +25,4 @@ deployments:
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
         container_create_kwargs:
-          entrypoint: ""
+          entrypoint: ["/bin/bash", "-c"]
