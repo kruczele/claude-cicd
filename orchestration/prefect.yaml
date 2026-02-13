@@ -39,4 +39,8 @@ deployments:
     work_queue_name: null
     job_variables:
       image: claude-skill-runner:latest
+      entrypoint: ""
+      command: null
+      volumes:
+        - /var/run/docker.sock:/var/run/docker.sock
   schedules: []
