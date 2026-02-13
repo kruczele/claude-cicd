@@ -18,5 +18,5 @@ deployments:
       main_branch: "main"
       priority: "medium"
     work_pool:
-      name: "Claude CI/CD"
+      name: "Claude CICD"
     work_queue_name: "claude-skills"
