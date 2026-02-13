@@ -109,14 +109,15 @@ RUN install -m 0755 -d /etc/apt/keyrings \
 # Additional Language Support (optional but useful)
 # ============================================================================
 
-# Python packages for common tasks
+# Python packages for common tasks + Prefect (for orchestration when used as work pool image)
 RUN pip3 install --break-system-packages --no-cache-dir \
     pyyaml \
     requests \
     pytest \
     black \
     flake8 \
-    mypy
+    mypy \
+    prefect
 
 # Go (for Go projects)
 RUN wget https://go.dev/dl/go1.22.0.linux-amd64.tar.gz \
