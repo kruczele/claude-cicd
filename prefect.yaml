@@ -22,7 +22,7 @@ deployments:
       work_queue_name: "claude-skills"
       job_variables:
         image: claude-skill-runner:latest
-        entrypoint: ""
-        command: null
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
+        container_create_kwargs:
+          entrypoint: ""
