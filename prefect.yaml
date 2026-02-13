@@ -1,0 +1,22 @@
+# Prefect deployment config - run `prefect deploy` from repo root
+prefect-version: "3"
+name: claude-cicd
+
+pull:
+  - prefect.deployments.steps.set_working_directory:
+      directory: .
+
+deployments:
+  - name: claude-dev-cycle
+    entrypoint: orchestration/prefect_flows.py:development_cycle
+    parameters:
+      task_id: "task-example"
+      repo_url: "https://github.com/org/repo.git"  # Override at trigger time
+      task_title: "Example Task"
+      task_description: "This is an example task"
+      target_branch: "feature/example"
+      main_branch: "main"
+      priority: "medium"
+    work_pool:
+      name: "Claude CI/CD"
+    work_queue_name: "claude-skills"
