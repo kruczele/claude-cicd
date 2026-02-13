@@ -2,10 +2,17 @@
 """
 Entrypoint script for Claude Code skill runner.
 Loads the appropriate skill definition and executes it.
+
+When used as Prefect work pool image, passes through to prefect (e.g. prefect flow-run execute).
 """
 
 import os
 import sys
+
+# Pass-through for Prefect orchestration - worker runs "prefect flow-run execute ..."
+if len(sys.argv) >= 2 and sys.argv[1] == "prefect":
+    os.execv(sys.executable, [sys.executable, "-m", "prefect"] + sys.argv[2:])
+
 import yaml
 import json
 import subprocess
