@@ -9,9 +9,14 @@ When used as Prefect work pool image, passes through to prefect (e.g. prefect fl
 import os
 import sys
 
-# Pass-through for Prefect orchestration - worker runs "prefect flow-run execute ..."
-if len(sys.argv) >= 2 and sys.argv[1] == "prefect":
-    os.execv(sys.executable, [sys.executable, "-m", "prefect"] + sys.argv[2:])
+# Pass-through for Prefect orchestration - worker runs "prefect flow-run execute ..." or "flow-run execute ..."
+if len(sys.argv) >= 2:
+    first_arg = sys.argv[1]
+    # Check if it's a prefect command (with or without "prefect" prefix)
+    if first_arg == "prefect" or first_arg in ["flow-run", "deployment", "agent", "worker"]:
+        # If first arg is "prefect", skip it; otherwise include all args
+        remaining_args = sys.argv[2:] if first_arg == "prefect" else sys.argv[1:]
+        os.execv(sys.executable, [sys.executable, "-m", "prefect"] + remaining_args)
 
 import yaml
 import json
