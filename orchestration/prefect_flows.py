@@ -144,8 +144,15 @@ def run_skill_in_container(
     duration = time.time() - start_time
 
     if result.returncode != 0:
-        logger.error(f"Skill failed: {result.stderr}")
-        raise Exception(f"Skill {skill_name} failed with code {result.returncode}")
+        logger.error(f"Skill failed with code {result.returncode}")
+        logger.error(f"Docker command: {' '.join(cmd)}")
+        logger.error(f"STDERR: {result.stderr}")
+        logger.error(f"STDOUT: {result.stdout}")
+        raise Exception(
+            f"Skill {skill_name} failed with code {result.returncode}\n"
+            f"STDERR: {result.stderr}\n"
+            f"STDOUT: {result.stdout}"
+        )
 
     # Parse outputs
     outputs = {}
