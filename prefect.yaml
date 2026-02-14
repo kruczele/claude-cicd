@@ -25,6 +25,5 @@ deployments:
         image: claude-skill-runner:latest
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
-        env:
-          GH_TOKEN_SURGEVENTURES: "{{ $GH_TOKEN_SURGEVENTURES }}"
-          GH_TOKEN_KRUCZELE: "{{ $GH_TOKEN_KRUCZELE }}"
+        # Note: GH_TOKEN_SURGEVENTURES and GH_TOKEN_KRUCZELE should be set
+        # in the worker pool's default environment variables (via UI or API)
