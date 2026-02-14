@@ -164,6 +164,10 @@ def run_skill_in_container(
         outputs[output_file.stem] = yaml.safe_load(output_file.read_text())
 
     logger.info(f"Skill completed in {duration:.1f}s")
+    logger.info(f"Output files found: {list(outputs.keys())}")
+    if not outputs:
+        logger.warning(f"No output files found in {output_path}")
+        logger.warning(f"Contents of output directory: {list(output_path.glob('*'))}")
 
     return {
         "status": "success",
@@ -434,6 +438,14 @@ def development_cycle(
         execute_result = execute_flow(
             task_id, task_input_path, workspace_path, iteration
         )
+
+        # Check if outputs contain expected keys
+        if "state" not in execute_result.get("outputs", {}):
+            logger.error(f"Execute skill outputs missing 'state' key")
+            logger.error(f"Available output keys: {list(execute_result.get('outputs', {}).keys())}")
+            logger.error(f"Full execute_result: {execute_result}")
+            raise KeyError(f"Execute skill did not produce 'state' output. Got: {list(execute_result.get('outputs', {}).keys())}")
+
         state = execute_result["outputs"]["state"]
 
         # Check for user questions
