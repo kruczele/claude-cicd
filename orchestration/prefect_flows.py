@@ -9,6 +9,7 @@ import yaml
 from pathlib import Path
 from typing import Dict, Any, Optional
 import time
+import os
 
 
 # ============================================================================
@@ -37,13 +38,21 @@ def clone_repo_shallow(
         clone_branch = checkout_branch or branch
         logger.info(f"Resuming PR #{pr_number} - cloning branch {clone_branch}")
 
+    # Inject GitHub token if available (for private repos)
+    clone_url = repo_url
+    github_token = os.getenv("GITHUB_TOKEN")
+    if github_token and "github.com" in repo_url:
+        # Convert https://github.com/user/repo.git to https://token@github.com/user/repo.git
+        clone_url = repo_url.replace("https://", f"https://{github_token}@")
+        logger.info(f"Using authenticated GitHub access for {repo_url}")
+
     clone_cmd = [
         "git", "clone",
         "--depth", "1",
         "--single-branch",
         "--branch", clone_branch,
         "--no-tags",
-        "--", repo_url, str(workspace_path)
+        "--", clone_url, str(workspace_path)
     ]
     logger.info(f"Shallow cloning {repo_url} ({clone_branch}) -> {workspace_path}")
 

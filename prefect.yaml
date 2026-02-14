@@ -3,8 +3,9 @@ prefect-version: "3"
 name: claude-cicd
 
 pull:
-  - prefect.deployments.steps.set_working_directory:
-      directory: .
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/kruczele/claude-cicd.git
+      branch: main
 
 deployments:
   - name: claude-dev-cycle
@@ -24,3 +25,5 @@ deployments:
         image: claude-skill-runner:latest
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
+        env:
+          GITHUB_TOKEN: "{{ $GITHUB_TOKEN }}"
