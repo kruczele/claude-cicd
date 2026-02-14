@@ -103,18 +103,22 @@ class SkillRunner:
 
         return result
 
-    def execute_claude(self, prompt: str, skill_name: str, task_input: Dict) -> Dict[str, Any]:
-        """Execute Claude Code with the given prompt."""
+    def _check_claude_cli_available(self) -> bool:
+        """Check if Claude Code CLI is installed."""
+        try:
+            result = subprocess.run(
+                ["claude", "--version"],
+                capture_output=True,
+                timeout=5
+            )
+            return result.returncode == 0
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
 
-        print(f"🤖 Executing skill: {skill_name}")
-        print(f"📁 Workspace: {self.workspace_path}")
-        print(f"📤 Output: {self.output_path}")
+    def _execute_with_cli(self, prompt: str, skill_name: str) -> Dict[str, Any]:
+        """Execute using Claude Code CLI."""
+        print("🔧 Using Claude Code CLI")
 
-        # Change to workspace directory
-        os.chdir(self.workspace_path)
-
-        # Prepare Claude Code command
-        # Note: Adjust based on actual Claude Code CLI interface
         claude_cmd = [
             "claude",
             "--prompt", prompt,
@@ -123,34 +127,102 @@ class SkillRunner:
             "--model", os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
         ]
 
-        # Add any skill-specific flags
         if skill_name == "execute":
             claude_cmd.extend(["--allow-write", "--allow-git"])
 
-        # Execute
+        result = subprocess.run(
+            claude_cmd,
+            capture_output=True,
+            text=True,
+            timeout=1800
+        )
+
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "error": result.stderr,
+                "stdout": result.stdout
+            }
+
+        return {
+            "status": "success",
+            "stdout": result.stdout,
+            "stderr": result.stderr
+        }
+
+    def _execute_with_sdk(self, prompt: str, skill_name: str) -> Dict[str, Any]:
+        """Execute using Anthropic Python SDK directly."""
+        print("🔧 Using Anthropic Python SDK")
+
         try:
-            result = subprocess.run(
-                claude_cmd,
-                capture_output=True,
-                text=True,
-                timeout=1800  # 30 minute timeout
+            from anthropic import Anthropic
+        except ImportError:
+            return {
+                "status": "error",
+                "error": "Anthropic SDK not installed. Run: pip install anthropic"
+            }
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            return {
+                "status": "error",
+                "error": "ANTHROPIC_API_KEY environment variable not set"
+            }
+
+        client = Anthropic(api_key=api_key)
+        model = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929")
+
+        try:
+            print(f"📡 Calling Claude API (model: {model})...")
+            response = client.messages.create(
+                model=model,
+                max_tokens=8000,
+                messages=[{
+                    "role": "user",
+                    "content": prompt
+                }]
             )
 
-            if result.returncode != 0:
-                print(f"❌ Claude execution failed: {result.stderr}", file=sys.stderr)
-                return {
-                    "status": "error",
-                    "error": result.stderr,
-                    "stdout": result.stdout
-                }
+            # Extract text response
+            response_text = ""
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    response_text += block.text
 
-            print("✅ Claude execution completed")
+            # Write response to output file
+            output_file = self.output_path / "state.md"
+            output_file.write_text(response_text)
+            print(f"✍️  Response written to {output_file}")
 
             return {
                 "status": "success",
-                "stdout": result.stdout,
-                "stderr": result.stderr
+                "stdout": response_text,
+                "stderr": ""
             }
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": f"API call failed: {str(e)}"
+            }
+
+    def execute_claude(self, prompt: str, skill_name: str, task_input: Dict) -> Dict[str, Any]:
+        """Execute Claude Code with the given prompt (CLI or SDK)."""
+
+        print(f"🤖 Executing skill: {skill_name}")
+        print(f"📁 Workspace: {self.workspace_path}")
+        print(f"📤 Output: {self.output_path}")
+
+        # Change to workspace directory
+        os.chdir(self.workspace_path)
+
+        # Try CLI first, fallback to SDK
+        try:
+            if self._check_claude_cli_available():
+                return self._execute_with_cli(prompt, skill_name)
+            else:
+                print("⚠️  Claude CLI not found, using SDK fallback")
+                return self._execute_with_sdk(prompt, skill_name)
 
         except subprocess.TimeoutExpired:
             print("⏱️  Claude execution timed out", file=sys.stderr)
@@ -160,6 +232,8 @@ class SkillRunner:
             }
         except Exception as e:
             print(f"❌ Unexpected error: {e}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
             return {
                 "status": "error",
                 "error": str(e)

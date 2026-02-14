@@ -117,7 +117,8 @@ RUN pip3 install --break-system-packages --no-cache-dir \
     black \
     flake8 \
     mypy \
-    prefect
+    prefect \
+    anthropic
 
 # Go (for Go projects)
 RUN wget https://go.dev/dl/go1.22.0.linux-amd64.tar.gz \
