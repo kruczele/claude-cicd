@@ -122,7 +122,8 @@ def run_skill_in_container(
     logger = get_run_logger()
     logger.info(f"Running skill '{skill_name}' in container")
 
-    # Docker run command
+    # Docker run command - uses unified skill runner image
+    # The SKILL env var determines which skill to execute
     cmd = [
         "docker", "run",
         "--rm",
@@ -130,7 +131,7 @@ def run_skill_in_container(
         "-v", f"{task_input_path}:/input/task-input.yaml:ro",
         "-v", f"{output_path}:/output",
         "-e", f"SKILL={skill_name}",
-        f"claude-skill-{skill_name}:latest"
+        "claude-skill-runner:latest"
     ]
 
     start_time = time.time()
