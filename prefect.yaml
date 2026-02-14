@@ -26,4 +26,5 @@ deployments:
         volumes:
           - /var/run/docker.sock:/var/run/docker.sock
         env:
-          GITHUB_TOKEN: "{{ $GITHUB_TOKEN }}"
+          GH_TOKEN_SURGEVENTURES: "{{ $GH_TOKEN_SURGEVENTURES }}"
+          GH_TOKEN_KRUCZELE: "{{ $GH_TOKEN_KRUCZELE }}"

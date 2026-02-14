@@ -39,12 +39,21 @@ def clone_repo_shallow(
         logger.info(f"Resuming PR #{pr_number} - cloning branch {clone_branch}")
 
     # Inject GitHub token if available (for private repos)
+    # Select token based on repository organization
     clone_url = repo_url
-    github_token = os.getenv("GITHUB_TOKEN")
-    if github_token and "github.com" in repo_url:
+    github_token = None
+
+    if "github.com/surgeventures/" in repo_url.lower():
+        github_token = os.getenv("GH_TOKEN_SURGEVENTURES")
+        logger.info(f"Using Surgeventures token for {repo_url}")
+    elif "github.com" in repo_url:
+        github_token = os.getenv("GH_TOKEN_KRUCZELE")
+        logger.info(f"Using Kruczele token for {repo_url}")
+
+    if github_token:
         # Convert https://github.com/user/repo.git to https://token@github.com/user/repo.git
         clone_url = repo_url.replace("https://", f"https://{github_token}@")
-        logger.info(f"Using authenticated GitHub access for {repo_url}")
+        logger.info(f"Using authenticated GitHub access")
 
     clone_cmd = [
         "git", "clone",
